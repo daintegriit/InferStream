@@ -1,0 +1,29 @@
+FEATURE_NAMES = [
+  "num__age",
+  "num__watch_hours",
+  "num__last_login_days",
+  "num__monthly_fee",
+  "num__number_of_profiles",
+  "num__avg_watch_time_per_day",
+
+  "cat__gender_Female",
+  "cat__gender_Male",
+  "cat__gender_Other",
+
+  "cat__subscription_type_Basic",
+  "cat__subscription_type_Premium",
+  "cat__subscription_type_Standard",
+
+  "cat__region_Africa",
+  "cat__region_Asia",
+  "cat__region_Europe",
+  "cat__region_North America",
+  "cat__region_Oceania",
+  "cat__region_South America",
+
+  "cat__device_Desktop",
+  "cat__device_Laptop",
+  "cat__device_Mobile",
+  "cat__device_TV",
+  "cat__device_Tablet",
+]

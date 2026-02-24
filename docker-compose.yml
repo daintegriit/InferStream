@@ -1,0 +1,48 @@
+version: "3.9"
+services:
+  backend:
+    build: ./backend
+    container_name: InferStream-backend
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8007:8007"
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8007/health"]
+      interval: 10s
+      retries: 3
+      timeout: 5s
+
+  frontend:
+    build: ./frontend
+    container_name: InferStream-frontend
+    ports:
+      - "3007:3007"
+    restart: unless-stopped
+
+  db:
+    image: postgres:15
+    container_name: InferStream-db
+    environment:
+      POSTGRES_USER: inferuser
+      POSTGRES_PASSWORD: inferpass
+      POSTGRES_DB: inferuser   # ✅ FIXED THIS LINE
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5437:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U inferuser"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

@@ -1,0 +1,39 @@
+{
+  "netflix": {
+    "ctr": {
+      "model_type": "xgboost",
+      "filename": "ctr_model_xgb.pkl",
+      "version": "v1"
+    },
+    "engagement": {
+      "model_type": "xgboost",
+      "filename": "engagement_model_xgb.pkl",
+      "version": "v1"
+    },
+    "neural": {
+      "model_type": "keras",
+      "filename": "keras_model.h5",
+      "version": "v1"
+    },
+    "tfrs": {
+      "model_type": "keras",
+      "filename": "tfrs_model.keras",
+      "version": "v1"
+    },
+    "torch": {
+      "model_type": "pytorch",
+      "filename": "pytorch_model.pt",
+      "version": "v1"
+    },
+    "sklearn": {
+      "model_type": "sklearn",
+      "filename": "sklearn_model.pkl",
+      "version": "v1"
+    },
+    "xgb_generic": {
+      "model_type": "xgboost",
+      "filename": "xgb_model.pkl",
+      "version": "v1"
+    }
+  }
+}
