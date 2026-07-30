@@ -158,7 +158,8 @@ inferstream/
 │   ├── main.py                          # lifespan loads models + feature store
 │   ├── features/
 │   │   ├── point_in_time.py             # batch vs stream parity harness
-│   │   └── build_online_store.py        # materialise the online store
+│   │   ├── build_online_store.py        # materialise the online store
+│   │   └── audit_notebooks.py           # scan notebooks for target leakage
 │   ├── routers/
 │   │   ├── features.py                  # registry + entity-key serving
 │   │   ├── predict.py                   # contract derived from the artifact
@@ -172,6 +173,7 @@ inferstream/
 │   ├── components/                      # form, registry, sweep, comparison
 │   └── pages/                           # dashboard, predict, features, logs
 ├── notebooks/
+│   └── _archive/                        # withdrawn notebooks, with findings
 ├── data/                                # datasets (gitignored)
 └── docker-compose.yml
 ```
@@ -247,7 +249,39 @@ Both defects below were surfaced by the platform's own derived contracts, not by
 
 **A fossilised feature list.** The serving path reconstructed a 23-column one-hot encoding by hand for a model that had been retrained on 12 raw features, and fed pre-transformed columns to a `Pipeline` expecting raw input. Every request returned 500. The 23 columns were correct for a 10-feature version of the model; two features had been added and the serving code never heard. The fix was structural — derive the contract from the artifact — not a corrected list.
 
-**An engagement model removed rather than retrained.** The comparison panel's union view flagged that it took `churned` — the churn outcome, unknowable at serving time — as an input feature. Investigating that turned up a larger problem: its target was `avg_watch_time_per_day >= median`, computed from a column left in the feature set, so the model reproduced a threshold on its own input. The notebook's leakage guard dropped `customer_id` while the actual leak sat two lines above it. No engagement signal exists in this dataset; the target was invented to have one. The artifact is archived under `backend/artifacts/_archive/`.
+**An engagement model removed rather than retrained.** The comparison panel's union view flagged that it took `churned` — the churn outcome, unknowable at serving time — as an input feature. Investigating that turned up a larger problem, described below: its target was a threshold on a column left in the feature set. No engagement signal exists in this dataset; the target was invented to have one. The artifact is archived under `backend/artifacts/_archive/`.
+
+---
+
+## Model honesty
+
+Fourteen training notebooks were audited. Three shared a defect, and the pattern is worth naming because it produces flawless-looking results:
+
+```python
+df["clicked"] = (df["avg_watch_time_per_day"] >= threshold).astype(int)
+y = df["clicked"]
+X = df.drop(columns=["customer_id", "churned", "clicked"])   # source stays
+```
+
+The label is a threshold on a column that remains in the feature set, so the model reproduces a lookup table. `train_ctr_model_netflix.ipynb` reported 1.0000 precision and recall with a confusion matrix of `[[747 0] [0 253]]` — not one error in a thousand test rows. Both engagement notebooks did the same thing with a median split. In one, the comment `# Drop identifiers / leakage` sits directly above a loop that removes `customer_id` while the actual leak is two lines higher.
+
+All three are archived under `notebooks/_archive/` with the finding recorded, rather than deleted.
+
+`backend/features/audit_notebooks.py` scans for the pattern. Its first version caught one case of three — it only matched dataframes named `df` and targets declared as `TARGET_COL`, so it missed a differently-named frame and a differently-named constant. That is noted here because a linter catching a third of the cases is more dangerous than none: silence reads as verification.
+
+### Which scores to believe
+
+| Notebook | Dataset | Test accuracy |
+|---|---|---|
+| `train_xgboost_model.ipynb` | Telco (7,043 real rows) | 0.7825 |
+| `train_pytorch_model.ipynb` | Telco | 0.7918 |
+| `train_keras_model.ipynb` | Telco | 0.8003 |
+| `train_sklearn_model_netflix.ipynb` | Netflix (5,000 synthetic) | 0.8870 |
+| `train_xgboost_model_netflix.ipynb` | Netflix (synthetic) | 0.9950 |
+
+The Telco numbers are the trustworthy ones: real churn labels, three frameworks converging on 0.78–0.80, which is where published benchmarks for that dataset sit. The Netflix numbers come from a generator whose label is a near-deterministic function of a few behavioural columns — the method is identical, only the data differs.
+
+The served churn model is the 0.9950 one, kept as a serving fixture. Its score measures the data generator, not the model.
 
 ---
 
@@ -267,6 +301,8 @@ Stated plainly, because a portfolio project that overclaims is worse than a smal
 
 **Several routers are stubs.** `/drift`, `/embeddings`, `/labels`, `/compare` are mounted but not wired to anything meaningful.
 
+**The notebook auditor is narrow.** It catches single-column thresholded targets only. Multi-column derivations, joins that bring the outcome in, temporal leakage, and degenerate tasks all pass it. "Not flagged" is not "verified clean."
+
 ---
 
 ## Roadmap
@@ -279,6 +315,7 @@ Stated plainly, because a portfolio project that overclaims is worse than a smal
 | Done | Serving contract derived from model artifacts |
 | Done | Counterfactual sweeps with absolute and relative measures |
 | Done | Dashboard rendered from the API's contracts |
+| Done | Notebook audit for target leakage |
 | In progress | Parity harness as a pytest CI gate |
 | In progress | Second feature (`user_avg_rating_7d`) to prove the abstraction |
 | Planned | Kafka transport replacing file replay |
