@@ -1,4 +1,4 @@
-# ⚡ InferStream
+# InferStream
 
 **A feature platform with verified point-in-time correctness.**
 
@@ -13,11 +13,11 @@ InferStream computes windowed ML features from an event log, serves them by enti
 
 ## The problem this solves
 
-Feature platforms exist because two things go wrong when features are computed ad hoc:
+Two things go wrong when features are computed ad hoc:
 
-**Point-in-time leakage.** A training row for an event at time *t* must use only what was knowable before *t*. Include the event itself and your offline metrics look excellent while the production model underperforms.
+**Point-in-time leakage.** A training row for an event at time *t* must use only what was knowable before *t*. Include the event itself and offline metrics look excellent while the production model underperforms.
 
-**Offline/online skew.** When the batch job that builds training data and the service that computes features at inference are two separate codebases, they drift. Silently. The model sees different arithmetic in production than it learned from.
+**Offline/online skew.** When the batch job that builds training data and the service that computes features at inference are separate codebases, they drift. Silently.
 
 InferStream addresses both by defining a feature once and executing it through two independent implementations that are asserted equal.
 
@@ -42,7 +42,7 @@ PARITY: 1,000/1,000 agree
 
 The same backfill with one character changed — `side="right"` instead of `"left"`, making the upper bound inclusive — differs on **1,000 of 1,000 rows**, introducing **6,794 phantom events**.
 
-Not 1,000. Nearly seven times that, because MovieLens users rate in bursts: a session submits many ratings at an identical timestamp, so an inclusive bound pulls in the whole simultaneous batch rather than a single event. Tie handling is the dominant term, not an edge case.
+Not 1,000. Nearly seven times that, because MovieLens users rate in bursts: a session submits many ratings at an identical timestamp, so an inclusive bound pulls in the whole simultaneous batch. Tie handling is the dominant term, not an edge case.
 
 ### Three semantics decisions
 
@@ -63,17 +63,12 @@ Verified by `backend/features/point_in_time.py`.
 median staleness: 203 days | lookup: 0.07ms
 ```
 
-```bash
+```json
 GET /features/user_rating_count_7d/entity/141567
-{
-  "value": 1565,
-  "as_of": 1697164147,
-  "staleness_seconds": 352117,
-  "lookup_ms": 0.0708
-}
+{ "value": 1565, "staleness_seconds": 352117, "lookup_ms": 0.0708 }
 ```
 
-Freshness is **measured** (`as_of - last_event_ts`), not declared as a constant. Cold-start entities return 404 rather than 0, keeping "no data" distinct from "no activity."
+Freshness is **measured** (`as_of - last_event_ts`), not declared. Cold-start entities return 404 rather than 0, keeping "no data" distinct from "no activity."
 
 ---
 
@@ -81,20 +76,20 @@ Freshness is **measured** (`as_of - last_event_ts`), not declared as a constant.
 
 ```
 Event log (MovieLens 32M, 2022-2023 slice: 1.7M ratings, 14.3k users)
-        │
-        ├── backfill()   binary search, as-of joins      → training sets
-        └── stream()     sliding windows, replay order   → online store
-                    │
-                    └── asserted equal at 1,000 sampled points
-                              │
+        |
+        +-- backfill()   binary search, as-of joins      -> training sets
+        +-- stream()     sliding windows, replay order   -> online store
+                    |
+                    +-- asserted equal at 1,000 sampled points
+                              |
                     online store (parquet, 14.3k keys)
-                              │
+                              |
                     GET /features/{name}/entity/{id}
 ```
 
-Inference is served separately from self-contained sklearn `Pipeline` artifacts. The API reads its entire feature contract — required columns, their order, numeric/categorical split, and legal category values — off the fitted `ColumnTransformer` at load time. Nothing about features is hardcoded in the serving layer, so a retrain that adds a column updates the API contract, the validation rules, and the dashboard form automatically.
+Inference is served from self-contained sklearn `Pipeline` artifacts. The API reads its entire feature contract — required columns, their order, numeric/categorical split, and legal category values — off the fitted `ColumnTransformer` at load time. Nothing about features is hardcoded in the serving layer, so a retrain that adds a column updates the API contract, the validation rules, and the dashboard form automatically.
 
-Bare estimators are **rejected at startup**. A model plus loose `scaler.pkl` / `encoder.pkl` files is the arrangement that lets training and serving drift apart; only pipelines carrying their own preprocessing are accepted.
+Bare estimators are **rejected at startup**. A model plus loose `scaler.pkl` / `encoder.pkl` files is the arrangement that lets training and serving drift apart.
 
 ---
 
@@ -121,21 +116,37 @@ Bare estimators are **rejected at startup**. A model plus loose `scaler.pkl` / `
 | Endpoint | Description |
 |---|---|
 | `GET /health` | Liveness plus what actually loaded |
-| `GET /status/meta` | Build id, git sha, environment |
+| `GET /status/meta` | Build id, git sha, environment, config |
 | `GET /docs` | OpenAPI |
 
-Additional routers: `/drift`, `/embeddings`, `/labels`, `/metrics`, `/logs`, `/validate`, `/compare`.
+### Counterfactual sweeps report two measures
 
-### Counterfactual example
-
-Holding all other features fixed and sweeping `payment_method`:
+Holding all other features fixed and varying `payment_method`:
 
 ```
 Credit Card  0.808    Debit Card  0.909    Gift Card  0.994
-PayPal       0.891    Crypto      0.991    spread:    0.186
+PayPal       0.891    Crypto      0.991
+absolute 0.1860   relative 1.23x
 ```
 
-An 18.6-point swing from payment method alone. On real data this is the kind of proxy variable — payment method correlating with income and creditworthiness — that a retention model should not be leaning on unreviewed. Here it reflects the synthetic generator (see Limitations), but surfacing it in one API call is the point.
+Absolute spread is the right measure near 0.5, where a shift moves a decision. Near the probability tails it hides real effects: a 0.0045 gap on a base of 0.015 is a **1.3× swing** in predicted risk while looking negligible in absolute terms. Both are reported, and either being material is flagged.
+
+Chart bars are scaled absolutely (0..1), not normalised to the largest value. Normalising makes a 0.0001 difference between near-zero probabilities render as a dramatic visual gap — a misleading chart on a page about disparity.
+
+---
+
+## Dashboard
+
+React + Vite + Tailwind, at `localhost:5173`.
+
+Every surface renders from the API's derived contracts rather than a hardcoded copy:
+
+- **Inference form** builds its fields from `/predict/schema`. Field list, order, types and dropdown options all come from the fitted encoder, so an invalid category cannot be submitted.
+- **Feature registry** shows measured coverage, staleness and lookup latency, with a live entity-key lookup.
+- **Counterfactual sweep** works across any categorical column the model declares.
+- **Model comparison** builds the union of all model contracts and flags features that only some models use.
+
+Colour is semantic: red marks elevated probability, material disparity, or failure; green marks verified; everything else is neutral chrome. Light and dark themes swap a CSS variable set — components reference token names, never hex.
 
 ---
 
@@ -152,15 +163,15 @@ inferstream/
 │   │   ├── features.py                  # registry + entity-key serving
 │   │   ├── predict.py                   # contract derived from the artifact
 │   │   └── drift.py, labels.py, ...
-│   ├── services/
-│   ├── state/
 │   ├── artifacts/
 │   │   ├── feature_store/*.parquet      # materialised features
-│   │   └── _archive/                    # superseded artifacts
+│   │   └── _archive/                    # withdrawn artifacts
 │   ├── models/netflix/*.pkl             # sklearn Pipelines (gitignored)
 │   └── tests/
-├── frontend/                            # React + Vite + Tailwind
-├── notebooks/                           # training notebooks
+├── frontend/src/
+│   ├── components/                      # form, registry, sweep, comparison
+│   └── pages/                           # dashboard, predict, features, logs
+├── notebooks/
 ├── data/                                # datasets (gitignored)
 └── docker-compose.yml
 ```
@@ -182,7 +193,6 @@ parts = [c[c.timestamp >= CUT] for c in
          pd.read_csv("data/ml-32m/ratings.csv", chunksize=2_000_000)]
 df = pd.concat(parts).sort_values("timestamp").reset_index(drop=True)
 df.to_parquet("data/ml-32m/ratings_recent.parquet", index=False)
-print(f"{len(df):,} rows, {df.userId.nunique():,} users")
 PY
 ```
 
@@ -201,8 +211,6 @@ pip install -r requirements.txt
 uvicorn main:app --reload --port 8007
 ```
 
-`http://localhost:8007` · docs at `/docs`
-
 ### Frontend
 
 ```bash
@@ -218,9 +226,9 @@ npm run dev
 ```bash
 API_HOST=0.0.0.0
 API_PORT=8007
-MODEL_DIR=                                        # defaults to backend/models/netflix
-FEATURE_STORE_DIR=                                # defaults to backend/artifacts/feature_store
-CORS_ORIGINS=http://localhost:5177,http://localhost:3007
+MODEL_DIR=                                 # defaults to backend/models/netflix
+FEATURE_STORE_DIR=                         # defaults to backend/artifacts/feature_store
+CORS_ORIGINS=http://localhost:5173
 ```
 
 `frontend/.env`:
@@ -229,7 +237,17 @@ CORS_ORIGINS=http://localhost:5177,http://localhost:3007
 VITE_API_URL=http://localhost:8007
 ```
 
-Note that `VITE_`-prefixed variables are compiled into the client bundle and visible to every visitor — never put secrets there.
+`VITE_`-prefixed variables are compiled into the client bundle and visible to every visitor — never put secrets there.
+
+---
+
+## What the tooling caught
+
+Both defects below were surfaced by the platform's own derived contracts, not by reading code. That is the argument for building this as infrastructure rather than notebooks.
+
+**A fossilised feature list.** The serving path reconstructed a 23-column one-hot encoding by hand for a model that had been retrained on 12 raw features, and fed pre-transformed columns to a `Pipeline` expecting raw input. Every request returned 500. The 23 columns were correct for a 10-feature version of the model; two features had been added and the serving code never heard. The fix was structural — derive the contract from the artifact — not a corrected list.
+
+**An engagement model removed rather than retrained.** The comparison panel's union view flagged that it took `churned` — the churn outcome, unknowable at serving time — as an input feature. Investigating that turned up a larger problem: its target was `avg_watch_time_per_day >= median`, computed from a column left in the feature set, so the model reproduced a threshold on its own input. The notebook's leakage guard dropped `customer_id` while the actual leak sat two lines above it. No engagement signal exists in this dataset; the target was invented to have one. The artifact is archived under `backend/artifacts/_archive/`.
 
 ---
 
@@ -237,15 +255,17 @@ Note that `VITE_`-prefixed variables are compiled into the client bundle and vis
 
 Stated plainly, because a portfolio project that overclaims is worse than a small one that doesn't.
 
-**The churn model is a fixture, not a result.** It's trained on a synthetic 5,000-row Kaggle dataset whose label is a near-deterministic function of a few behavioural columns. Held-out AUC is 0.9997 — that measures the data generator, not the model. Five of its twelve features (`age`, `gender`, `region`, `device`, `favorite_genre`) sit within ±0.02 of the base rate and carry no signal. The model exists so the serving path has something real to exercise.
+**The churn model is a fixture, not a result.** Trained on a synthetic 5,000-row Kaggle dataset whose label is a near-deterministic function of a few behavioural columns. Held-out AUC is 0.9997 — that measures the data generator, not the model. Five of its twelve features (`age`, `gender`, `region`, `device`, `favorite_genre`) sit within ±0.02 of the base rate and carry no signal. It exists so the serving path has something real to exercise.
 
 **"Streaming" means replay semantics, not a broker.** The consumer processes events in timestamp order with no lookahead and per-entity state — the same shape a Kafka consumer has — but reads from a file. Swapping in a broker changes the transport, not the correctness argument.
 
 **One feature.** `user_rating_count_7d`. The harness generalises; the catalog doesn't exist yet.
 
-**The online store is a snapshot, not a live store.** Materialised at a single as-of instant and served from memory. No Redis, no incremental updates.
+**The online store is a snapshot.** Materialised at a single as-of instant and served from memory. No Redis, no incremental updates.
 
 **Top entity is probably a bot.** User 141567 logged 1,565 ratings in seven days — over 9/hour sustained. Left in deliberately and flagged rather than silently clipped.
+
+**Several routers are stubs.** `/drift`, `/embeddings`, `/labels`, `/compare` are mounted but not wired to anything meaningful.
 
 ---
 
@@ -253,26 +273,18 @@ Stated plainly, because a portfolio project that overclaims is worse than a smal
 
 | Status | Goal |
 |---|---|
-| ✅ | Point-in-time correct batch backfill |
-| ✅ | Streaming consumer with verified parity |
-| ✅ | Online store, entity-key serving, measured freshness |
-| ✅ | Serving contract derived from model artifacts |
-| ✅ | Counterfactual fairness sweeps |
-| 🛠️ | Parity harness as a pytest CI gate |
-| 🛠️ | Second feature (`user_avg_rating_7d`) to prove the abstraction |
-| 🛠️ | Dashboard rendered from `/predict/schema` |
-| 📋 | Kafka transport replacing file replay |
-| 📋 | Redis online store with incremental updates |
-| 📋 | Training-set builder: entity/timestamp pairs → point-in-time correct matrix |
-| 📋 | Feature lineage and drift monitoring |
-
----
-
-## Docker
-
-```bash
-docker-compose up --build
-```
+| Done | Point-in-time correct batch backfill |
+| Done | Streaming consumer with verified parity |
+| Done | Online store, entity-key serving, measured freshness |
+| Done | Serving contract derived from model artifacts |
+| Done | Counterfactual sweeps with absolute and relative measures |
+| Done | Dashboard rendered from the API's contracts |
+| In progress | Parity harness as a pytest CI gate |
+| In progress | Second feature (`user_avg_rating_7d`) to prove the abstraction |
+| Planned | Kafka transport replacing file replay |
+| Planned | Redis online store with incremental updates |
+| Planned | Training-set builder: entity/timestamp pairs to point-in-time correct matrix |
+| Planned | Feature lineage and drift monitoring |
 
 ---
 

@@ -37,7 +37,6 @@ MODEL_DIR = Path(os.getenv("MODEL_DIR", _BACKEND / "models" / "netflix"))
 MODEL_FILES = {
     "xgboost": "xgb_pipeline.pkl",
     "sklearn": "sklearn_pipeline.pkl",
-    "engagement": "engagement_pipeline_xgb.pkl",
 }
 
 
