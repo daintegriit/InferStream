@@ -1,105 +1,103 @@
 import React, { useEffect, useState } from "react";
-import axios from "axios";
 
-const ModelVersionPanel = () => {
+const API = import.meta.env.VITE_API_URL || "http://localhost:8007";
+
+export default function ModelVersionPanel() {
   const [models, setModels] = useState([]);
   const [changelog, setChangelog] = useState([]);
+  const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
   useEffect(() => {
-    const fetchModelInfo = async () => {
+    async function load() {
+      const problems = [];
+
+      // These two endpoints may not exist. Report that plainly rather than
+      // failing the whole panel.
       try {
-        // Fetch status (models + versions)
-        const statusRes = await axios.get("http://localhost:8007/status");
-
-        const availableModels = statusRes.data?.models_available || [];
-        const versions = statusRes.data?.versions || {};
-
-        setModels(
-          availableModels.map((model) => ({
-            name: model,
-            version: versions[model] || "unknown",
-          }))
-        );
-
-        // Fetch changelog
-        const changeRes = await axios.get(
-          "http://localhost:8007/status/changelog"
-        );
-
-        setChangelog(changeRes.data?.changelog || []);
-      } catch (err) {
-        console.error("Error fetching model info:", err);
-        setError("Failed to load model version information.");
-      } finally {
-        setLoading(false);
+        const res = await fetch(`${API}/status`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const available = data.models_available || [];
+        const versions = data.versions || {};
+        setModels(available.map((name) => ({ name, version: versions[name] || "unversioned" })));
+      } catch (e) {
+        problems.push(`/status: ${e.message}`);
       }
-    };
 
-    fetchModelInfo();
+      try {
+        const res = await fetch(`${API}/status/changelog`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        setChangelog(data.changelog || []);
+      } catch (e) {
+        problems.push(`/status/changelog: ${e.message}`);
+      }
+
+      setNotes(problems);
+      setLoading(false);
+    }
+
+    load();
   }, []);
 
   if (loading) {
-    return <p className="text-gray-400">Loading model information…</p>;
-  }
-
-  if (error) {
-    return <p className="text-red-400">{error}</p>;
+    return <p className="text-sm text-neutral-500">Loading model information…</p>;
   }
 
   return (
-    <div className="space-y-6 bg-gray-900 p-6 rounded-lg shadow-md">
-      {/* Available Models */}
-      <div>
-        <h3 className="text-lg font-semibold text-yellow-400 mb-2">
-          📦 Available Models
+    <div className="space-y-5 rounded-lg border border-neutral-800 bg-neutral-950 p-5">
+      <section>
+        <h3 className="mb-2 font-mono text-[11px] uppercase tracking-widest text-neutral-500">
+          Registered models
         </h3>
         {models.length === 0 ? (
-          <p className="text-gray-400 text-sm">No models registered.</p>
+          <p className="text-sm text-neutral-500">
+            None reported. Artifacts carry no version metadata yet — see{" "}
+            <code className="text-neutral-400">/health</code> for what actually loaded.
+          </p>
         ) : (
-          <ul className="list-disc pl-5 text-sm text-gray-300">
+          <ul className="space-y-1">
             {models.map((m) => (
-              <li key={m.name}>
-                <span className="font-medium text-white">{m.name}</span>{" "}
-                <span className="text-gray-400">—</span>{" "}
-                <span className="text-green-300">{m.version}</span>
+              <li key={m.name} className="flex items-baseline gap-3 font-mono text-xs">
+                <span className="text-neutral-200">{m.name}</span>
+                <span className="text-neutral-600">{m.version}</span>
               </li>
             ))}
           </ul>
         )}
-      </div>
+      </section>
 
-      {/* Change Log */}
-      <div>
-        <h3 className="text-lg font-semibold text-yellow-400 mb-2">
-          📝 Model Change Log
+      <section>
+        <h3 className="mb-2 font-mono text-[11px] uppercase tracking-widest text-neutral-500">
+          Change log
         </h3>
         {changelog.length === 0 ? (
-          <p className="text-gray-400 text-sm">No changelog entries.</p>
+          <p className="text-sm text-neutral-500">No entries.</p>
         ) : (
-          <ul className="text-sm text-gray-300 space-y-2">
+          <ul className="space-y-2">
             {changelog.map((entry, i) => (
-              <li
-                key={i}
-                className="border-l-2 border-purple-500 pl-3"
-              >
-                <strong className="text-white">{entry.model}</strong>{" "}
-                updated to{" "}
-                <span className="text-green-300">{entry.version}</span>{" "}
-                on{" "}
-                <span className="text-blue-300">{entry.date}</span>
-                <br />
-                <span className="italic text-gray-400">
-                  {entry.notes}
-                </span>
+              <li key={i} className="border-l border-neutral-800 pl-3">
+                <p className="font-mono text-xs text-neutral-200">
+                  {entry.model} <span className="text-neutral-600">{entry.version}</span>{" "}
+                  <span className="text-neutral-600">{entry.date}</span>
+                </p>
+                {entry.notes && (
+                  <p className="mt-0.5 text-xs leading-relaxed text-neutral-500">
+                    {entry.notes}
+                  </p>
+                )}
               </li>
             ))}
           </ul>
         )}
-      </div>
+      </section>
+
+      {notes.length > 0 && (
+        <p className="border-t border-neutral-800 pt-3 font-mono text-[11px] leading-relaxed text-neutral-600">
+          {notes.join(" · ")}
+        </p>
+      )}
     </div>
   );
-};
-
-export default ModelVersionPanel;
+}

@@ -1,51 +1,58 @@
 import React, { useEffect, useState } from "react";
-import axios from "axios";
 
-const MetricsPanel = () => {
+const API = import.meta.env.VITE_API_URL || "http://localhost:8007";
+const POLL_MS = 15000;
+
+export default function MetricsPanel() {
   const [metrics, setMetrics] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
-  const fetchMetrics = async () => {
-    try {
-      const res = await axios.get("http://localhost:8007/metrics");
-      setMetrics(res.data);
-      setError(null);
-    } catch (err) {
-      console.error("Metrics fetch failed:", err);
-      setError("❌ Failed to fetch system metrics");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchMetrics();
-    const interval = setInterval(fetchMetrics, 15000); // refresh every 15s
-    return () => clearInterval(interval);
+    let cancelled = false;
+
+    async function poll() {
+      try {
+        const res = await fetch(`${API}/metrics`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (cancelled) return;
+        setMetrics(data);
+        setError(null);
+      } catch (e) {
+        if (!cancelled) setError(`/metrics returned ${e.message}`);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    poll();
+    const id = setInterval(poll, POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
   }, []);
 
   return (
-    <div className="bg-gray-800 p-4 rounded-lg mt-8 text-sm shadow-md">
-      <h2 className="text-indigo-300 text-lg font-semibold mb-3">
-        📊 Model System Metrics
+    <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-5">
+      <h2 className="mb-3 font-mono text-[11px] uppercase tracking-widest text-neutral-500">
+        System metrics
       </h2>
 
-      {loading && (
-        <p className="text-gray-400">Loading metrics…</p>
-      )}
+      {loading && <p className="text-sm text-neutral-500">Loading…</p>}
 
       {error && (
-        <p className="text-red-400">{error}</p>
+        <p className="rounded border border-neutral-800 bg-neutral-900/60 px-3 py-2 text-xs leading-relaxed text-neutral-400">
+          {error}
+        </p>
       )}
 
       {!loading && !error && metrics && (
-        <pre className="text-gray-300 whitespace-pre-wrap break-all bg-gray-900 p-3 rounded">
+        <pre className="max-h-80 overflow-auto rounded bg-neutral-900/60 p-3 font-mono text-xs leading-relaxed text-neutral-300">
           {JSON.stringify(metrics, null, 2)}
         </pre>
       )}
     </div>
   );
-};
-
-export default MetricsPanel;
+}

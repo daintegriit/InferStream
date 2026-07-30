@@ -1,102 +1,44 @@
-import React, { useState } from "react";
+import React from "react";
 import InferenceForm from "../components/InferenceForm";
-import PredictionResult from "../components/PredictionResult";
-import AICopilot from "../components/AICopilot";
-import ExplainabilityPanel from "../components/ExplainabilityPanel";
-import ShapChart from "../components/ShapChart";
+import ResultPanel from "../components/ResultPanel";
 import PDFExportButton from "../components/PDFExportButton";
 
-const Prediction = () => {
-  const [result, setResult] = useState(null);
-  const [model, setModel] = useState("xgboost");
-  const [shapMode, setShapMode] = useState("bar");
-
-  const handleResult = (res) => {
-    setResult(res);
-  };
-
+/**
+ * Model comes from App via props, so the Navbar selector controls this form.
+ *
+ * Form and result sit side by side with the result column sticky: adjusting
+ * an input and seeing the effect shouldn't require scrolling.
+ *
+ * SHAP and Copilot are omitted until shap_explainer.py stops using the input
+ * row as its own background set -- until then its values collapse toward zero.
+ */
+export default function Prediction({ selectedModel, result, onResult }) {
   return (
-    <div className="bg-gray-900 text-white min-h-screen p-6">
-      {/* 🔝 Toolbar */}
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-yellow-400">
-          🧠 Prediction Console
-        </h1>
-
-        <PDFExportButton model={model} result={result} />
-      </div>
-
-      {/* 🧠 Inference Section */}
-      <section className="bg-gray-800 p-6 rounded-lg shadow mb-8">
-        <h2 className="text-2xl font-semibold mb-4">Run Prediction</h2>
-
-        {/* IMPORTANT: model comes from page, not form */}
-        <InferenceForm
-          onResult={handleResult}
-          modelType={model}
-        />
-
-        <PredictionResult data={result} />
-
-        {result && (
-          <p className="text-sm text-gray-400 mt-2">
-            Model used:{" "}
-            <span className="text-yellow-300 font-medium">{model}</span>
+    <div className="mx-auto max-w-[1600px] space-y-8 px-4">
+      <header className="flex flex-wrap items-end justify-between gap-4 border-b border-neutral-800 pb-6 pt-2">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-neutral-100">
+            Prediction console
+          </h1>
+          <p className="mt-1 max-w-2xl text-sm leading-relaxed text-neutral-400">
+            Fields are rendered from the model's own contract. Categorical options come from the
+            fitted encoder, so an invalid value can't be submitted.
           </p>
-        )}
-      </section>
+        </div>
+        <PDFExportButton model={selectedModel} result={result} />
+      </header>
 
-      {/* 📊 Explainability + SHAP */}
-      {result && (
-        <>
-          <section className="bg-gray-800 p-6 rounded-lg shadow mb-8">
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="text-xl font-semibold">
-                📊 Model Explainability
-              </h3>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+        <div className="lg:col-span-5">
+          <InferenceForm modelType={selectedModel} onResult={onResult} />
+        </div>
 
-              <select
-                className="bg-gray-700 text-white px-3 py-1 rounded"
-                value={shapMode}
-                onChange={(e) => setShapMode(e.target.value)}
-              >
-                <option value="bar">Bar</option>
-                <option value="radar">Radar</option>
-                <option value="raw">Raw JSON</option>
-              </select>
-            </div>
-
-            {/* SHAP only renders when available */}
-            {shapMode === "bar" && result.explanation && (
-              <ShapChart explanation={result.explanation} />
-            )}
-
-            {shapMode === "radar" && (
-              <p className="italic text-sm text-gray-400">
-                Radar chart coming in Phase 2
-              </p>
-            )}
-
-            {shapMode === "raw" && (
-              <pre className="text-xs bg-black p-3 rounded overflow-x-auto max-h-64">
-                {JSON.stringify(result.explanation || {}, null, 2)}
-              </pre>
-            )}
-          </section>
-
-          {/* 🧠 Explainability Narrative */}
-          <ExplainabilityPanel explanation={result.explanation || null} />
-
-          {/* 🤖 AI Copilot */}
-          <AICopilot
-            explanation={result.explanation || null}
-            prediction={result.prediction}
-            model={model}
-          />
-        </>
-      )}
+        <div className="lg:col-span-7">
+          <div className="lg:sticky lg:top-6">
+            <ResultPanel result={result} />
+          </div>
+        </div>
+      </div>
     </div>
   );
-};
-
-export default Prediction;
+}

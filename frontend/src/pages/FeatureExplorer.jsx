@@ -1,67 +1,25 @@
-import React, { useEffect, useState } from "react";
-import FeatureSummaryChart from "../components/FeatureSummaryChart";
+import React from "react";
 import FeatureTable from "../components/FeatureTable";
 
-const FeatureExplorer = () => {
-  const [features, setFeatures] = useState([]);
-  const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchFeatures = async () => {
-      try {
-        const res = await fetch("http://localhost:8007/features/");
-        const data = await res.json();
-
-        if (!Array.isArray(data)) {
-          throw new Error("Invalid feature data format");
-        }
-
-        const formatted = data.map((f) => ({
-          name: f.name,
-          type: f.type,
-          example: f.example ?? "—",
-          tags: f.tags ?? [],
-          source: f.source ?? "unknown",
-          updated_at: new Date(f.last_updated),
-        }));
-
-        setFeatures(formatted);
-      } catch (err) {
-        console.error("❌ Failed to fetch features:", err);
-        setError("Failed to load feature metadata.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchFeatures();
-  }, []);
-
+/**
+ * FeatureTable fetches and renders the registry itself, so this page is
+ * just framing. The previous version fetched /features/, checked for an
+ * array (the endpoint returns an object), and bailed every time.
+ */
+export default function FeatureExplorer() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-white dark:from-gray-900 dark:to-gray-800 p-8">
-      <h2 className="text-3xl font-bold mb-6 text-slate-700 dark:text-slate-100 text-center">
-        📊 Feature Registry & Freshness
-      </h2>
-
-      {loading && (
-        <p className="text-center text-slate-400">
-          Loading feature metadata…
+    <div className="mx-auto max-w-6xl space-y-6">
+      <header className="border-b border-neutral-800 pb-6">
+        <h1 className="text-2xl font-semibold tracking-tight text-neutral-100">
+          Features
+        </h1>
+        <p className="mt-1 max-w-prose text-sm leading-relaxed text-neutral-400">
+          Every feature the platform computes, with measured coverage and staleness. Look up a
+          value by entity key to see what the online store returns and how long it took.
         </p>
-      )}
+      </header>
 
-      {error && (
-        <div className="text-red-500 text-center font-medium">{error}</div>
-      )}
-
-      {!loading && !error && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
-          <FeatureSummaryChart features={features} />
-          <FeatureTable features={features} />
-        </div>
-      )}
+      <FeatureTable />
     </div>
   );
-};
-
-export default FeatureExplorer;
+}

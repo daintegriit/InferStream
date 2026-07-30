@@ -1,174 +1,206 @@
-import React, { useState } from "react";
-import axios from "axios";
+import React, { useEffect, useMemo, useState } from "react";
 
-const InferenceForm = ({ onResult, modelType }) => {
-  const [loading, setLoading] = useState(false);
+const API = import.meta.env.VITE_API_URL || "http://localhost:8007";
 
-  /**
-   * 🔑 Minimal user-facing inputs
-   * Everything else is normalized to backend contract
-   */
-  const [formData, setFormData] = useState({
-    age: 30,
-    country: "US",
-    subscription_type: "basic",
-    avg_watch_time_per_day: 2,
-    favorite_genre: "action",
-  });
+/**
+ * Renders itself from GET /predict/schema.
+ *
+ * No feature list, no dropdown options, no field order lives in this file.
+ * Retrain with a new column and this form grows a field on next load --
+ * which is the point: the UI cannot drift from the model.
+ */
+export default function InferenceForm({ modelType, onResult }) {
+  const [schema, setSchema] = useState(null);
+  const [values, setValues] = useState({});
+  const [status, setStatus] = useState("loading"); // loading | ready | error | submitting
+  const [error, setError] = useState(null);
 
-  const genreOptions = [
-    "action",
-    "comedy",
-    "drama",
-    "horror",
-    "scifi",
-    "documentary",
-  ];
+  // ---- load the contract -------------------------------------------------
+  useEffect(() => {
+    let cancelled = false;
+    setStatus("loading");
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-
-    try {
-      /**
-       * 🔐 BACKEND CONTRACT (MUST MATCH predict.py)
-       */
-      const features = {
-        age: Number(formData.age),
-        watch_hours: Number(formData.avg_watch_time_per_day) * 60,
-        last_login_days: 3,
-        monthly_fee:
-          formData.subscription_type === "premium"
-            ? 19.99
-            : formData.subscription_type === "standard"
-            ? 15.99
-            : 13.99,
-        number_of_profiles: 2,
-        avg_watch_time_per_day: Number(formData.avg_watch_time_per_day),
-        gender: "Male",                  // Phase 2: make user-selectable
-        subscription_type: formData.subscription_type,
-        region: formData.country || "US",
-        device: "Mobile",
-        payment_method: "Credit Card",
-        favorite_genre: formData.favorite_genre,
-        demographic: "unknown",          // REQUIRED for drift + fairness
-      };
-
-      const payload = {
-        model: modelType,                // 🔥 single source of truth
-        features,
-      };
-
-      const res = await axios.post(
-        "http://localhost:8007/predict",
-        payload
-      );
-
-      onResult(res.data);
-    } catch (err) {
-      console.error("Prediction error:", err);
-      onResult({
-        error:
-          err.response?.data?.detail ||
-          err.message ||
-          "Prediction failed",
+    fetch(`${API}/predict/schema`)
+      .then((res) => {
+        if (!res.ok) throw new Error(`Schema unavailable (${res.status})`);
+        return res.json();
+      })
+      .then((data) => {
+        if (cancelled) return;
+        const found = data.models.find((m) => m.model === modelType);
+        if (!found) {
+          setError(
+            `Model "${modelType}" isn't loaded. Available: ${data.models
+              .map((m) => m.model)
+              .join(", ")}`
+          );
+          setStatus("error");
+          return;
+        }
+        setSchema(found);
+        setValues(seedDefaults(found.features));
+        setStatus("ready");
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setError(`${e.message}. Is the API running on ${API}?`);
+        setStatus("error");
       });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [modelType]);
+
+  const counts = useMemo(() => {
+    if (!schema) return null;
+    const numeric = schema.features.filter((f) => f.type === "numeric").length;
+    return { total: schema.features.length, numeric, categorical: schema.features.length - numeric };
+  }, [schema]);
+
+  // ---- submit ------------------------------------------------------------
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setStatus("submitting");
+    setError(null);
+
+    const features = {};
+    for (const f of schema.features) {
+      features[f.name] = f.type === "numeric" ? Number(values[f.name]) : values[f.name];
     }
 
-    setLoading(false);
-  };
+    try {
+      const res = await fetch(`${API}/predict/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: modelType, features }),
+      });
+      const body = await res.json();
+
+      if (!res.ok) {
+        setError(body.detail || `Request failed (${res.status})`);
+        setStatus("ready");
+        return;
+      }
+
+      onResult({ ...body, features });
+      setStatus("ready");
+    } catch (e) {
+      setError(`Could not reach ${API}`);
+      setStatus("ready");
+    }
+  }
+
+  // ---- render ------------------------------------------------------------
+  if (status === "loading") {
+    return (
+      <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-6">
+        <p className="font-mono text-xs uppercase tracking-widest text-neutral-500">
+          Reading contract from {modelType}
+        </p>
+      </div>
+    );
+  }
+
+  if (status === "error") {
+    return (
+      <div className="rounded-lg border border-red-900/60 bg-neutral-950 p-6">
+        <p className="font-mono text-xs uppercase tracking-widest text-red-400">
+          Contract unavailable
+        </p>
+        <p className="mt-2 text-sm text-neutral-300">{error}</p>
+      </div>
+    );
+  }
 
   return (
     <form
       onSubmit={handleSubmit}
-      className="space-y-4 bg-gray-900 p-6 rounded-lg shadow text-white"
+      className="rounded-lg border border-neutral-800 bg-neutral-950 p-6 text-neutral-100"
     >
-      <h2 className="text-xl font-bold">🎯 Run Prediction</h2>
+      <header className="mb-6 border-b border-neutral-800 pb-4">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-lg font-semibold tracking-tight">Run inference</h2>
+          <span className="font-mono text-xs text-amber-400">{modelType}</span>
+        </div>
+        <p className="mt-1 font-mono text-[11px] uppercase tracking-widest text-neutral-500">
+          {counts.total} features · {counts.numeric} numeric · {counts.categorical} categorical
+          <span className="ml-2 text-neutral-600">from artifact</span>
+        </p>
+      </header>
 
-      {/* 🔒 Model Display (read-only, page controls it) */}
-      <div className="text-sm text-gray-400">
-        Model selected:{" "}
-        <span className="text-yellow-300 font-medium">{modelType}</span>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {schema.features.map((feature) => (
+          <Field
+            key={feature.name}
+            feature={feature}
+            value={values[feature.name]}
+            onChange={(v) => setValues((prev) => ({ ...prev, [feature.name]: v }))}
+          />
+        ))}
       </div>
 
-      {/* Inputs */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <input
-          name="age"
-          type="number"
-          placeholder="Age"
-          value={formData.age}
-          onChange={handleChange}
-          className="input"
-          required
-        />
-
-        <input
-          name="avg_watch_time_per_day"
-          type="number"
-          step="0.1"
-          placeholder="Avg Watch Time / Day (hrs)"
-          value={formData.avg_watch_time_per_day}
-          onChange={handleChange}
-          className="input"
-          required
-        />
-
-        <input
-          name="country"
-          placeholder="Country"
-          value={formData.country}
-          onChange={handleChange}
-          className="input"
-        />
-      </div>
-
-      {/* Subscription */}
-      <div>
-        <label className="block mb-1">Subscription Type</label>
-        <select
-          name="subscription_type"
-          value={formData.subscription_type}
-          onChange={handleChange}
-          className="w-full p-2 rounded bg-gray-800"
-        >
-          <option value="basic">Basic</option>
-          <option value="standard">Standard</option>
-          <option value="premium">Premium</option>
-        </select>
-      </div>
-
-      {/* Favorite Genre */}
-      <div>
-        <label className="block mb-1">Favorite Genre</label>
-        <select
-          name="favorite_genre"
-          value={formData.favorite_genre}
-          onChange={handleChange}
-          className="w-full p-2 rounded bg-gray-800"
-        >
-          {genreOptions.map((genre) => (
-            <option key={genre} value={genre}>
-              {genre.charAt(0).toUpperCase() + genre.slice(1)}
-            </option>
-          ))}
-        </select>
-      </div>
+      {error && (
+        <p className="mt-5 rounded border border-red-900/60 bg-red-950/30 px-3 py-2 font-mono text-xs text-red-300">
+          {error}
+        </p>
+      )}
 
       <button
         type="submit"
-        className="mt-4 bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded text-white"
-        disabled={loading}
+        disabled={status === "submitting"}
+        className="mt-6 w-full rounded bg-amber-500 px-4 py-2.5 text-sm font-semibold text-neutral-950 transition hover:bg-amber-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 disabled:opacity-40"
       >
-        {loading ? "Predicting..." : "Submit"}
+        {status === "submitting" ? "Predicting…" : "Predict"}
       </button>
     </form>
   );
-};
+}
 
-export default InferenceForm;
+/** One field, shaped by its declared type. */
+function Field({ feature, value, onChange }) {
+  const label = feature.name.replace(/_/g, " ");
+  const base =
+    "w-full rounded border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-amber-500 focus:outline-none";
+
+  return (
+    <label className="block">
+      <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-wider text-neutral-400">
+        {label}
+      </span>
+
+      {feature.type === "categorical" ? (
+        <select
+          className={base}
+          value={value ?? ""}
+          onChange={(e) => onChange(e.target.value)}
+          required
+        >
+          {feature.allowed_values.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <input
+          type="number"
+          step="any"
+          className={`${base} font-mono tabular-nums`}
+          value={value ?? ""}
+          onChange={(e) => onChange(e.target.value)}
+          required
+        />
+      )}
+    </label>
+  );
+}
+
+/** Categorical fields start on their first legal value; numerics start blank-ish. */
+function seedDefaults(features) {
+  const out = {};
+  for (const f of features) {
+    out[f.name] = f.type === "categorical" ? f.allowed_values[0] : 0;
+  }
+  return out;
+}

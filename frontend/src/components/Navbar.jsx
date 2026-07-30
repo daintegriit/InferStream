@@ -1,75 +1,100 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import ThemeToggle from "./ThemeToggle";
 import PDFExportButton from "./PDFExportButton";
 
-const Navbar = ({ selectedModel, onChangeModel, result }) => {
+const API = import.meta.env.VITE_API_URL || "http://localhost:8007";
+
+const NAV_LINKS = [
+  { path: "/dashboard", label: "Dashboard" },
+  { path: "/predict", label: "Predict" },
+  { path: "/features", label: "Features" },
+  { path: "/metrics", label: "Metrics" },
+  { path: "/logs", label: "Logs" },
+];
+
+export default function Navbar({ selectedModel, onChangeModel, result }) {
   const location = useLocation();
+  const [models, setModels] = useState([]);
 
-  const navLinks = [
-    { path: "/dashboard", label: "📊 Dashboard" },
-    { path: "/predict", label: "🧠 Predict" },
-    { path: "/metrics", label: "📈 Metrics" },
-    { path: "/features", label: "🧬 Features" },
-    { path: "/logs", label: "📝 Logs" },
-  ];
+  // Model options come from what the server actually loaded, so the
+  // selector can't offer something that 404s.
+  useEffect(() => {
+    fetch(`${API}/health`)
+      .then((res) => res.json())
+      .then((data) => {
+        const loaded = data.models_loaded || [];
+        setModels(loaded);
+        if (loaded.length && !loaded.includes(selectedModel)) {
+          onChangeModel(loaded[0]);
+        }
+      })
+      .catch(() => setModels([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const showPDFExport =
-    location.pathname === "/predict" ||
-    location.pathname === "/dashboard";
+  const showExport =
+    location.pathname === "/predict" || location.pathname === "/dashboard";
 
   return (
-    <nav className="flex flex-col md:flex-row justify-between items-center bg-gray-900 py-4 px-6 text-white rounded mb-6 shadow-md">
-      {/* 🔗 Brand + Navigation */}
-      <div className="flex flex-wrap items-center gap-4 mb-2 md:mb-0">
-        <h1 className="text-2xl font-bold text-yellow-400 tracking-wide">
-          ⚡ InferStream
-        </h1>
+    <nav className="mb-6 flex flex-col gap-3 rounded-lg border border-neutral-800 bg-neutral-950 px-6 py-4 text-neutral-100 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-wrap items-center gap-5">
+        <Link to="/dashboard" className="flex items-baseline gap-2">
+          <span className="text-lg font-semibold tracking-tight text-amber-400">
+            InferStream
+          </span>
+          <span className="font-mono text-[10px] uppercase tracking-widest text-neutral-600">
+            feature platform
+          </span>
+        </Link>
 
-        {navLinks.map((link) => (
-          <Link
-            key={link.path}
-            to={link.path}
-            className={`text-sm px-3 py-1 rounded transition ${
-              location.pathname === link.path
-                ? "bg-indigo-600 text-white"
-                : "text-gray-300 hover:text-yellow-400"
-            }`}
-          >
-            {link.label}
-          </Link>
-        ))}
+        <div className="flex flex-wrap gap-1">
+          {NAV_LINKS.map((link) => {
+            const active = location.pathname === link.path;
+            return (
+              <Link
+                key={link.path}
+                to={link.path}
+                aria-current={active ? "page" : undefined}
+                className={`rounded px-3 py-1 font-mono text-[11px] uppercase tracking-wider transition focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
+                  active
+                    ? "bg-neutral-800 text-neutral-100"
+                    : "text-neutral-500 hover:text-neutral-200"
+                }`}
+              >
+                {link.label}
+              </Link>
+            );
+          })}
+        </div>
       </div>
 
-      {/* ⚙️ Action Bar */}
-      <div className="flex items-center gap-3">
-        {/* 📤 PDF Export (context-aware) */}
-        {showPDFExport && (
-          <PDFExportButton model={selectedModel} result={result} />
-        )}
-
-        {/* 🌓 Theme Toggle */}
+      <div className="flex flex-wrap items-center gap-3">
+        {showExport && <PDFExportButton model={selectedModel} result={result} />}
         <ThemeToggle />
 
-        {/* 🔽 Model Selector */}
-        <label htmlFor="modelSelect" className="text-sm font-medium text-gray-300">
-          Model:
+        <label className="flex items-center gap-2">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-neutral-500">
+            model
+          </span>
+          <select
+            value={selectedModel || ""}
+            onChange={(e) => onChangeModel(e.target.value)}
+            disabled={models.length === 0}
+            className="rounded border border-neutral-800 bg-neutral-900 px-2 py-1 font-mono text-xs text-amber-400 focus:border-amber-500 focus:outline-none disabled:opacity-40"
+          >
+            {models.length === 0 ? (
+              <option>none loaded</option>
+            ) : (
+              models.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))
+            )}
+          </select>
         </label>
-        <select
-          id="modelSelect"
-          value={selectedModel}
-          onChange={(e) => onChangeModel(e.target.value)}
-          className="bg-gray-700 border border-gray-500 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        >
-          {["sklearn", "xgboost", "pytorch", "keras"].map((opt) => (
-            <option key={opt} value={opt}>
-              {opt}
-            </option>
-          ))}
-        </select>
       </div>
     </nav>
   );
-};
-
-export default Navbar;
+}

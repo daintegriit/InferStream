@@ -2,15 +2,56 @@ import React from "react";
 import InferenceLog from "../components/InferenceLog";
 import LiveLogPanel from "../components/LiveLogPanel";
 
-const Logs = () => {
-  const history = []; // replace this with actual log state if needed
+/**
+ * Two different logs, deliberately separated:
+ *
+ *   Session  -- predictions made in this browser tab, held in App state.
+ *               Cleared on refresh.
+ *   Server   -- what the backend recorded via state/prediction_store,
+ *               polled from /logs/latest. Survives refresh, shared across
+ *               clients.
+ *
+ * The old version hardcoded `const history = []`, so the session list
+ * rendered null unconditionally.
+ */
+export default function Logs({ history = [] }) {
   return (
-    <div className="bg-gray-900 text-white min-h-screen p-6">
-      <h1 className="text-3xl font-bold mb-6">📝 Inference Logs</h1>
-      <LiveLogPanel />
-      <InferenceLog history={history} />
+    <div className="mx-auto max-w-4xl space-y-8">
+      <header className="border-b border-neutral-800 pb-6">
+        <h1 className="text-2xl font-semibold tracking-tight text-neutral-100">
+          Inference logs
+        </h1>
+        <p className="mt-1 max-w-prose text-sm leading-relaxed text-neutral-400">
+          Session history is local to this tab. The server log is what the backend recorded and
+          persists across clients.
+        </p>
+      </header>
+
+      <section>
+        <div className="mb-3 flex items-baseline justify-between">
+          <h2 className="font-mono text-[11px] uppercase tracking-widest text-neutral-500">
+            This session
+          </h2>
+          <span className="font-mono text-[11px] tabular-nums text-neutral-600">
+            {history.length} {history.length === 1 ? "prediction" : "predictions"}
+          </span>
+        </div>
+
+        {history.length === 0 ? (
+          <p className="rounded-lg border border-neutral-800 bg-neutral-950 px-4 py-6 text-sm text-neutral-500">
+            Nothing yet. Run a prediction and it will appear here.
+          </p>
+        ) : (
+          <InferenceLog history={history} />
+        )}
+      </section>
+
+      <section>
+        <h2 className="mb-3 font-mono text-[11px] uppercase tracking-widest text-neutral-500">
+          Server log
+        </h2>
+        <LiveLogPanel />
+      </section>
     </div>
   );
-};
-
-export default Logs;
+}

@@ -15,11 +15,29 @@ import os
 import platform
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
+
+# ============================================================
+# Environment
+# ------------------------------------------------------------
+# Must run BEFORE any os.getenv() below -- module-level assignments execute
+# at import time, so a later load_dotenv() would be too late. Anchored to
+# this file so it works from any working directory.
+# ============================================================
+_BACKEND = Path(__file__).resolve().parent
+_DOTENV_LOADED = False
+
+try:
+    from dotenv import load_dotenv
+
+    _DOTENV_LOADED = load_dotenv(_BACKEND / ".env")
+except ImportError:  # python-dotenv not installed; fall back to real env vars
+    pass
 
 # ============================================================
 # Routers
@@ -46,7 +64,7 @@ logging.basicConfig(
 logger = logging.getLogger("inferstream")
 
 # ============================================================
-# Config (single source: .env)
+# Config
 # ============================================================
 API_HOST = os.getenv("API_HOST", "0.0.0.0")
 API_PORT = int(os.getenv("API_PORT", "8007"))
@@ -54,8 +72,16 @@ API_KEY = os.getenv("API_KEY")
 
 # Explicit list only. Never combine "*" with allow_credentials=True -- Starlette
 # will echo back any Origin, which lets any site make credentialed requests.
-DEFAULT_ORIGINS = "http://localhost:5177,http://localhost:3007,http://localhost:3000"
-CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", DEFAULT_ORIGINS).split(",") if o.strip()]
+# 5173 is the Vite default; keep it here so a missing .env still works.
+DEFAULT_ORIGINS = (
+    "http://localhost:5173,"
+    "http://localhost:5177,"
+    "http://localhost:3007,"
+    "http://localhost:3000"
+)
+CORS_ORIGINS = [
+    o.strip() for o in os.getenv("CORS_ORIGINS", DEFAULT_ORIGINS).split(",") if o.strip()
+]
 
 
 # ============================================================
@@ -64,8 +90,16 @@ CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", DEFAULT_ORIGINS).sp
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting InferStream API")
+    logger.info(
+        "Config: port=%s | .env=%s | CORS=%s",
+        API_PORT,
+        "loaded" if _DOTENV_LOADED else "NOT LOADED (using defaults)",
+        CORS_ORIGINS,
+    )
+
     load_models()          # raises RuntimeError if no model loads
     load_feature_store()   # warns and continues if nothing is materialised
+
     logger.info("Ready. Models: %s | Features: %s", sorted(LOADED), sorted(TABLES))
     yield
     logger.info("Shutting down")
@@ -131,6 +165,8 @@ def build_info():
         "git_sha": os.getenv("GIT_SHA", "local"),
         "environment": os.getenv("DEPLOY_ENV", "local"),
         "host": platform.node(),
+        "dotenv_loaded": _DOTENV_LOADED,
+        "cors_origins": CORS_ORIGINS,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
