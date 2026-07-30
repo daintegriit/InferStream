@@ -86,7 +86,17 @@ export default function FairnessChart({ result }) {
       }));
   }, [sweep]);
 
-  const negligible = sweep && sweep.max_spread < 0.01;
+  // Absolute spread understates effects near the tails: 0.0045 on a base of
+  // 0.015 is a 1.3x swing. Report both and let the larger one speak.
+  const ratio = useMemo(() => {
+    if (!sweep) return null;
+    const values = Object.values(sweep.probabilities);
+    const low = Math.min(...values);
+    return low > 0 ? Math.max(...values) / low : null;
+  }, [sweep]);
+
+  const materialAbsolute = sweep && sweep.max_spread >= 0.1;
+  const materialRelative = ratio != null && ratio >= 1.25;
 
   return (
     <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-6 text-neutral-100">
@@ -168,36 +178,56 @@ export default function FairnessChart({ result }) {
           </div>
 
           <footer className="mt-5 border-t border-neutral-800 pt-4">
-            <div className="flex items-baseline gap-3">
-              <span className="font-mono text-[11px] uppercase tracking-widest text-neutral-500">
-                spread
-              </span>
-              <span
-                className={`font-mono text-2xl tabular-nums ${
-                  sweep.max_spread >= 0.1 ? "text-amber-400" : "text-neutral-300"
-                }`}
-              >
-                {sweep.max_spread.toFixed(4)}
-              </span>
+            <div className="flex flex-wrap items-baseline gap-8">
+              <div className="flex items-baseline gap-3">
+                <span className="font-mono text-[11px] uppercase tracking-widest text-neutral-500">
+                  absolute
+                </span>
+                <span
+                  className={`font-mono text-2xl tabular-nums ${
+                    materialAbsolute ? "text-amber-400" : "text-neutral-300"
+                  }`}
+                >
+                  {sweep.max_spread.toFixed(4)}
+                </span>
+              </div>
+
+              {ratio != null && (
+                <div className="flex items-baseline gap-3">
+                  <span className="font-mono text-[11px] uppercase tracking-widest text-neutral-500">
+                    relative
+                  </span>
+                  <span
+                    className={`font-mono text-2xl tabular-nums ${
+                      materialRelative ? "text-amber-400" : "text-neutral-300"
+                    }`}
+                  >
+                    {ratio.toFixed(2)}×
+                  </span>
+                </div>
+              )}
             </div>
 
-            <p className="mt-2 max-w-prose text-sm leading-relaxed text-neutral-400">
-              {sweep.max_spread >= 0.1 ? (
+            <p className="mt-3 max-w-prose text-sm leading-relaxed text-neutral-400">
+              {materialAbsolute ? (
                 <>
                   Changing <span className="text-neutral-200">{attribute}</span> alone moves the
                   prediction by {(sweep.max_spread * 100).toFixed(1)} points. Worth understanding
                   before this model informs a decision about anyone.
                 </>
-              ) : negligible ? (
+              ) : materialRelative ? (
                 <>
-                  <span className="text-neutral-200">{attribute}</span> changes the prediction by
-                  less than 0.01. The bars are near-identical because the effect is near-zero,
-                  not because the chart is flat.
+                  The absolute gap is small, but the highest group is{" "}
+                  <span className="text-neutral-200">{ratio.toFixed(2)}×</span> the lowest. Near
+                  the tails a small absolute difference is a large proportional one — worth
+                  checking before treating{" "}
+                  <span className="text-neutral-200">{attribute}</span> as inert.
                 </>
               ) : (
                 <>
-                  <span className="text-neutral-200">{attribute}</span> moves the prediction by
-                  under a point. This attribute is not driving the output for this input.
+                  <span className="text-neutral-200">{attribute}</span> moves the prediction
+                  negligibly on both measures. The bars are near-identical because the effect is
+                  near-zero, not because the chart is flat.
                 </>
               )}
             </p>
