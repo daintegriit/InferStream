@@ -66,3 +66,15 @@ desktop.ini
 
 # Model artifacts missed by earlier rules
 *.keras
+
+# Secrets
+.env
+*.env
+!.env.example
+
+# Editor history
+.history/
+
+# Artifacts missed by earlier rules
+*.keras
+backend/artifacts/
