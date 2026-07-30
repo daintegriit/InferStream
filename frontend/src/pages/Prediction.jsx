@@ -15,12 +15,12 @@ import PDFExportButton from "../components/PDFExportButton";
 export default function Prediction({ selectedModel, result, onResult }) {
   return (
     <div className="mx-auto max-w-[1600px] space-y-8 px-4">
-      <header className="flex flex-wrap items-end justify-between gap-4 border-b border-neutral-800 pb-6 pt-2">
+      <header className="flex flex-wrap items-end justify-between gap-4 border-b border-surface-border pb-6 pt-2">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-neutral-100">
+          <h1 className="text-2xl font-semibold tracking-tight text-content">
             Prediction console
           </h1>
-          <p className="mt-1 max-w-2xl text-sm leading-relaxed text-neutral-400">
+          <p className="mt-1 max-w-2xl text-sm leading-relaxed text-content-secondary">
             Fields are rendered from the model's own contract. Categorical options come from the
             fitted encoder, so an invalid value can't be submitted.
           </p>

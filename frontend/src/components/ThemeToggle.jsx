@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from "react";
-import { FaMoon, FaSun } from "react-icons/fa";
+import { FiMoon, FiSun } from "react-icons/fi";
 
 /**
- * Owns its own state. The previous version required `theme` and `setTheme`
- * props that Navbar never passed, so clicking it called undefined().
+ * Toggles the `dark` class on <html>, which swaps the token set defined in
+ * index.css. Defaults to dark, then to the system preference on first visit.
  */
 export default function ThemeToggle() {
   const [theme, setTheme] = useState(() => {
     if (typeof window === "undefined") return "dark";
-    return localStorage.getItem("inferstream-theme") || "dark";
+    const saved = localStorage.getItem("inferstream-theme");
+    if (saved) return saved;
+    return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
   });
 
   useEffect(() => {
@@ -22,9 +24,9 @@ export default function ThemeToggle() {
     <button
       onClick={() => setTheme(next)}
       aria-label={`Switch to ${next} mode`}
-      className="flex items-center gap-2 rounded border border-neutral-800 bg-neutral-900 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-neutral-400 transition hover:text-neutral-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
+      className="flex items-center gap-2 rounded border border-surface-border bg-surface-raised px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-content-secondary transition hover:text-content focus:outline-none focus-visible:ring-2 focus-visible:ring-risk"
     >
-      {theme === "dark" ? <FaSun aria-hidden /> : <FaMoon aria-hidden />}
+      {theme === "dark" ? <FiSun aria-hidden /> : <FiMoon aria-hidden />}
       {next}
     </button>
   );

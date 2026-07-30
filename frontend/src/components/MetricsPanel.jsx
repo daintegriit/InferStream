@@ -35,21 +35,21 @@ export default function MetricsPanel() {
   }, []);
 
   return (
-    <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-5">
-      <h2 className="mb-3 font-mono text-[11px] uppercase tracking-widest text-neutral-500">
+    <div className="rounded-lg border border-surface-border bg-surface-base p-5">
+      <h2 className="mb-3 font-mono text-[11px] uppercase tracking-widest text-content-muted">
         System metrics
       </h2>
 
-      {loading && <p className="text-sm text-neutral-500">Loading…</p>}
+      {loading && <p className="text-sm text-content-muted">Loading…</p>}
 
       {error && (
-        <p className="rounded border border-neutral-800 bg-neutral-900/60 px-3 py-2 text-xs leading-relaxed text-neutral-400">
+        <p className="rounded border border-surface-border bg-surface-raised/60 px-3 py-2 text-xs leading-relaxed text-content-secondary">
           {error}
         </p>
       )}
 
       {!loading && !error && metrics && (
-        <pre className="max-h-80 overflow-auto rounded bg-neutral-900/60 p-3 font-mono text-xs leading-relaxed text-neutral-300">
+        <pre className="max-h-80 overflow-auto rounded bg-surface-raised/60 p-3 font-mono text-xs leading-relaxed text-content-secondary">
           {JSON.stringify(metrics, null, 2)}
         </pre>
       )}

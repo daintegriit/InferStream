@@ -76,7 +76,7 @@ export default function App() {
           <Route
             path="*"
             element={
-              <p className="font-mono text-sm text-neutral-500">
+              <p className="font-mono text-sm text-content-muted">
                 No page at this address.
               </p>
             }

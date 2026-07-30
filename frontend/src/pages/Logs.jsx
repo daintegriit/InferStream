@@ -17,11 +17,11 @@ import LiveLogPanel from "../components/LiveLogPanel";
 export default function Logs({ history = [] }) {
   return (
     <div className="mx-auto max-w-4xl space-y-8">
-      <header className="border-b border-neutral-800 pb-6">
-        <h1 className="text-2xl font-semibold tracking-tight text-neutral-100">
+      <header className="border-b border-surface-border pb-6">
+        <h1 className="text-2xl font-semibold tracking-tight text-content">
           Inference logs
         </h1>
-        <p className="mt-1 max-w-prose text-sm leading-relaxed text-neutral-400">
+        <p className="mt-1 max-w-prose text-sm leading-relaxed text-content-secondary">
           Session history is local to this tab. The server log is what the backend recorded and
           persists across clients.
         </p>
@@ -29,16 +29,16 @@ export default function Logs({ history = [] }) {
 
       <section>
         <div className="mb-3 flex items-baseline justify-between">
-          <h2 className="font-mono text-[11px] uppercase tracking-widest text-neutral-500">
+          <h2 className="font-mono text-[11px] uppercase tracking-widest text-content-muted">
             This session
           </h2>
-          <span className="font-mono text-[11px] tabular-nums text-neutral-600">
+          <span className="font-mono text-[11px] tabular-nums text-content-muted">
             {history.length} {history.length === 1 ? "prediction" : "predictions"}
           </span>
         </div>
 
         {history.length === 0 ? (
-          <p className="rounded-lg border border-neutral-800 bg-neutral-950 px-4 py-6 text-sm text-neutral-500">
+          <p className="rounded-lg border border-surface-border bg-surface-base px-4 py-6 text-sm text-content-muted">
             Nothing yet. Run a prediction and it will appear here.
           </p>
         ) : (
@@ -47,7 +47,7 @@ export default function Logs({ history = [] }) {
       </section>
 
       <section>
-        <h2 className="mb-3 font-mono text-[11px] uppercase tracking-widest text-neutral-500">
+        <h2 className="mb-3 font-mono text-[11px] uppercase tracking-widest text-content-muted">
           Server log
         </h2>
         <LiveLogPanel />

@@ -9,12 +9,12 @@ import FairnessChart from "./FairnessChart";
 export default function ResultPanel({ result }) {
   if (!result) {
     return (
-      <div className="flex min-h-[16rem] items-center justify-center rounded-lg border border-dashed border-neutral-800 bg-neutral-950/50 p-8">
+      <div className="flex min-h-[16rem] items-center justify-center rounded-lg border border-dashed border-surface-border bg-surface-base/50 p-8">
         <div className="max-w-xs text-center">
-          <p className="font-mono text-[11px] uppercase tracking-widest text-neutral-600">
+          <p className="font-mono text-[11px] uppercase tracking-widest text-content-muted">
             No prediction yet
           </p>
-          <p className="mt-2 text-sm leading-relaxed text-neutral-500">
+          <p className="mt-2 text-sm leading-relaxed text-content-muted">
             Fill the form and predict. The result and a counterfactual sweep across any
             categorical feature will appear here.
           </p>

@@ -26,7 +26,7 @@ const DriftChart = () => {
 
   if (err) return <p className="text-red-400">DriftChart error: {err}</p>;
   if (!data || data.length === 0)
-    return <p className="text-gray-400">Loading drift chart...</p>;
+    return <p className="text-content-secondary">Loading drift chart...</p>;
 
   const demographics = [...new Set(data.map((d) => d.demographic))];
   const genders = [...new Set(data.map((d) => d.gender))];
@@ -54,9 +54,9 @@ const DriftChart = () => {
   };
 
   return (
-    <div className="bg-gray-800 p-4 rounded-lg shadow-md mt-8">
+    <div className="bg-surface-raised p-4 rounded-lg shadow-md mt-8">
       <ReactECharts option={option} style={{ height: "400px" }} />
-      <p className="text-xs text-gray-400 mt-2">
+      <p className="text-xs text-content-secondary mt-2">
         Based on in-memory prediction logs (Phase 2). Run “Compare All Models” a few times to populate drift buckets.
       </p>
     </div>

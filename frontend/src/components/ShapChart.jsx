@@ -13,8 +13,8 @@ const ShapChart = ({ explanation }) => {
     explanation.features.length !== explanation.contributions.length
   ) {
     return (
-      <div className="mt-6 bg-gray-800 p-4 rounded shadow">
-        <p className="text-gray-400 italic">
+      <div className="mt-6 bg-surface-raised p-4 rounded shadow">
+        <p className="text-content-secondary italic">
           No SHAP explanation available for this prediction.
         </p>
       </div>
@@ -92,7 +92,7 @@ const ShapChart = ({ explanation }) => {
   };
 
   return (
-    <div className="mt-6 bg-gray-800 p-4 rounded shadow">
+    <div className="mt-6 bg-surface-raised p-4 rounded shadow">
       <ReactECharts option={option} style={{ height: "360px" }} />
     </div>
   );

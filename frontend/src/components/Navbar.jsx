@@ -17,8 +17,6 @@ export default function Navbar({ selectedModel, onChangeModel, result }) {
   const location = useLocation();
   const [models, setModels] = useState([]);
 
-  // Model options come from what the server actually loaded, so the
-  // selector can't offer something that 404s.
   useEffect(() => {
     fetch(`${API}/health`)
       .then((res) => res.json())
@@ -37,13 +35,12 @@ export default function Navbar({ selectedModel, onChangeModel, result }) {
     location.pathname === "/predict" || location.pathname === "/dashboard";
 
   return (
-    <nav className="mb-6 flex flex-col gap-3 rounded-lg border border-neutral-800 bg-neutral-950 px-6 py-4 text-neutral-100 md:flex-row md:items-center md:justify-between">
+    <nav className="flex flex-col gap-3 border-b border-surface-border bg-surface-raised px-6 py-4 md:flex-row md:items-center md:justify-between">
       <div className="flex flex-wrap items-center gap-5">
+        {/* The wordmark is the one place red is pure identity rather than data. */}
         <Link to="/dashboard" className="flex items-baseline gap-2">
-          <span className="text-lg font-semibold tracking-tight text-amber-400">
-            InferStream
-          </span>
-          <span className="font-mono text-[10px] uppercase tracking-widest text-neutral-600">
+          <span className="text-lg font-bold tracking-tight text-risk">InferStream</span>
+          <span className="font-mono text-[10px] uppercase tracking-widest text-content-muted">
             feature platform
           </span>
         </Link>
@@ -56,10 +53,10 @@ export default function Navbar({ selectedModel, onChangeModel, result }) {
                 key={link.path}
                 to={link.path}
                 aria-current={active ? "page" : undefined}
-                className={`rounded px-3 py-1 font-mono text-[11px] uppercase tracking-wider transition focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
+                className={`rounded px-3 py-1 font-mono text-[11px] uppercase tracking-wider transition focus:outline-none focus-visible:ring-2 focus-visible:ring-risk ${
                   active
-                    ? "bg-neutral-800 text-neutral-100"
-                    : "text-neutral-500 hover:text-neutral-200"
+                    ? "bg-risk text-white"
+                    : "text-content-muted hover:text-content"
                 }`}
               >
                 {link.label}
@@ -74,14 +71,14 @@ export default function Navbar({ selectedModel, onChangeModel, result }) {
         <ThemeToggle />
 
         <label className="flex items-center gap-2">
-          <span className="font-mono text-[11px] uppercase tracking-wider text-neutral-500">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-content-muted">
             model
           </span>
           <select
             value={selectedModel || ""}
             onChange={(e) => onChangeModel(e.target.value)}
             disabled={models.length === 0}
-            className="rounded border border-neutral-800 bg-neutral-900 px-2 py-1 font-mono text-xs text-amber-400 focus:border-amber-500 focus:outline-none disabled:opacity-40"
+            className="rounded border border-surface-border bg-surface-base px-2 py-1 font-mono text-xs text-content focus:border-risk focus:outline-none disabled:opacity-40"
           >
             {models.length === 0 ? (
               <option>none loaded</option>

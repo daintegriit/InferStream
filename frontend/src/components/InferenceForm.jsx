@@ -6,16 +6,14 @@ const API = import.meta.env.VITE_API_URL || "http://localhost:8007";
  * Renders itself from GET /predict/schema.
  *
  * No feature list, no dropdown options, no field order lives in this file.
- * Retrain with a new column and this form grows a field on next load --
- * which is the point: the UI cannot drift from the model.
+ * Retrain with a new column and this form grows a field on next load.
  */
 export default function InferenceForm({ modelType, onResult }) {
   const [schema, setSchema] = useState(null);
   const [values, setValues] = useState({});
-  const [status, setStatus] = useState("loading"); // loading | ready | error | submitting
+  const [status, setStatus] = useState("loading");
   const [error, setError] = useState(null);
 
-  // ---- load the contract -------------------------------------------------
   useEffect(() => {
     let cancelled = false;
     setStatus("loading");
@@ -55,10 +53,13 @@ export default function InferenceForm({ modelType, onResult }) {
   const counts = useMemo(() => {
     if (!schema) return null;
     const numeric = schema.features.filter((f) => f.type === "numeric").length;
-    return { total: schema.features.length, numeric, categorical: schema.features.length - numeric };
+    return {
+      total: schema.features.length,
+      numeric,
+      categorical: schema.features.length - numeric,
+    };
   }, [schema]);
 
-  // ---- submit ------------------------------------------------------------
   async function handleSubmit(e) {
     e.preventDefault();
     setStatus("submitting");
@@ -85,17 +86,16 @@ export default function InferenceForm({ modelType, onResult }) {
 
       onResult({ ...body, features });
       setStatus("ready");
-    } catch (e) {
+    } catch {
       setError(`Could not reach ${API}`);
       setStatus("ready");
     }
   }
 
-  // ---- render ------------------------------------------------------------
   if (status === "loading") {
     return (
-      <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-6">
-        <p className="font-mono text-xs uppercase tracking-widest text-neutral-500">
+      <div className="rounded-lg border border-surface-border bg-surface-base p-6">
+        <p className="font-mono text-xs uppercase tracking-widest text-content-muted">
           Reading contract from {modelType}
         </p>
       </div>
@@ -104,11 +104,11 @@ export default function InferenceForm({ modelType, onResult }) {
 
   if (status === "error") {
     return (
-      <div className="rounded-lg border border-red-900/60 bg-neutral-950 p-6">
-        <p className="font-mono text-xs uppercase tracking-widest text-red-400">
+      <div className="rounded-lg border border-risk-dim bg-surface-base p-6">
+        <p className="font-mono text-[11px] uppercase tracking-widest text-risk">
           Contract unavailable
         </p>
-        <p className="mt-2 text-sm text-neutral-300">{error}</p>
+        <p className="mt-2 text-sm leading-relaxed text-content-secondary">{error}</p>
       </div>
     );
   }
@@ -116,16 +116,16 @@ export default function InferenceForm({ modelType, onResult }) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-lg border border-neutral-800 bg-neutral-950 p-6 text-neutral-100"
+      className="rounded-lg border border-surface-border bg-surface-base p-6 text-content"
     >
-      <header className="mb-6 border-b border-neutral-800 pb-4">
+      <header className="mb-6 border-b border-surface-border pb-4">
         <div className="flex items-baseline justify-between">
           <h2 className="text-lg font-semibold tracking-tight">Run inference</h2>
-          <span className="font-mono text-xs text-amber-400">{modelType}</span>
+          <span className="font-mono text-xs text-content">{modelType}</span>
         </div>
-        <p className="mt-1 font-mono text-[11px] uppercase tracking-widest text-neutral-500">
+        <p className="mt-1 font-mono text-[11px] uppercase tracking-widest text-content-muted">
           {counts.total} features · {counts.numeric} numeric · {counts.categorical} categorical
-          <span className="ml-2 text-neutral-600">from artifact</span>
+          <span className="ml-2 text-content-muted">from artifact</span>
         </p>
       </header>
 
@@ -141,15 +141,16 @@ export default function InferenceForm({ modelType, onResult }) {
       </div>
 
       {error && (
-        <p className="mt-5 rounded border border-red-900/60 bg-red-950/30 px-3 py-2 font-mono text-xs text-red-300">
+        <p className="mt-5 rounded border border-risk-dim bg-risk-wash px-3 py-2 font-mono text-xs leading-relaxed text-risk">
           {error}
         </p>
       )}
 
+      {/* Neutral action: bone-white, not red. Red is reserved for data. */}
       <button
         type="submit"
         disabled={status === "submitting"}
-        className="mt-6 w-full rounded bg-amber-500 px-4 py-2.5 text-sm font-semibold text-neutral-950 transition hover:bg-amber-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 disabled:opacity-40"
+        className="mt-6 w-full rounded bg-risk px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-risk-dim focus:outline-none focus-visible:ring-2 focus-visible:ring-risk disabled:opacity-40"
       >
         {status === "submitting" ? "Predicting…" : "Predict"}
       </button>
@@ -157,15 +158,14 @@ export default function InferenceForm({ modelType, onResult }) {
   );
 }
 
-/** One field, shaped by its declared type. */
 function Field({ feature, value, onChange }) {
   const label = feature.name.replace(/_/g, " ");
   const base =
-    "w-full rounded border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-amber-500 focus:outline-none";
+    "w-full rounded border border-surface-border bg-surface-raised px-3 py-2 text-sm text-content focus:border-accent focus:outline-none";
 
   return (
     <label className="block">
-      <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-wider text-neutral-400">
+      <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-wider text-content-secondary">
         {label}
       </span>
 
@@ -196,7 +196,6 @@ function Field({ feature, value, onChange }) {
   );
 }
 
-/** Categorical fields start on their first legal value; numerics start blank-ish. */
 function seedDefaults(features) {
   const out = {};
   for (const f of features) {

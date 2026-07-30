@@ -84,7 +84,7 @@ export default function ModelComparisonPanel() {
 
   if (status === "loading") {
     return (
-      <p className="font-mono text-xs uppercase tracking-widest text-neutral-500">
+      <p className="font-mono text-xs uppercase tracking-widest text-content-muted">
         Loading model contracts
       </p>
     );
@@ -92,11 +92,11 @@ export default function ModelComparisonPanel() {
 
   if (status === "error") {
     return (
-      <div className="rounded-lg border border-red-900/60 bg-neutral-950 p-6">
+      <div className="rounded-lg border border-red-900/60 bg-surface-base p-6">
         <p className="font-mono text-[11px] uppercase tracking-widest text-red-400">
           Contracts unavailable
         </p>
-        <p className="mt-2 text-sm text-neutral-300">{error}</p>
+        <p className="mt-2 text-sm text-content-secondary">{error}</p>
       </div>
     );
   }
@@ -105,11 +105,11 @@ export default function ModelComparisonPanel() {
   const maxProbability = scored.length ? Math.max(...scored.map(([, r]) => r.probability)) : 0;
 
   return (
-    <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-6 text-neutral-100">
-      <header className="mb-5 flex flex-wrap items-baseline justify-between gap-3 border-b border-neutral-800 pb-4">
+    <section className="rounded-lg border border-surface-border bg-surface-base p-6 text-content">
+      <header className="mb-5 flex flex-wrap items-baseline justify-between gap-3 border-b border-surface-border pb-4">
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Model comparison</h2>
-          <p className="mt-1 font-mono text-[11px] uppercase tracking-widest text-neutral-500">
+          <p className="mt-1 font-mono text-[11px] uppercase tracking-widest text-content-muted">
             {models.length} models · {union.length} distinct features
           </p>
         </div>
@@ -117,7 +117,7 @@ export default function ModelComparisonPanel() {
           {models.map((m) => (
             <span
               key={m.model}
-              className="rounded-sm border border-neutral-800 bg-neutral-900 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-neutral-400"
+              className="rounded-sm border border-surface-border bg-surface-raised px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-content-secondary"
             >
               {m.model} · {m.features.length}
             </span>
@@ -129,12 +129,12 @@ export default function ModelComparisonPanel() {
         {union.map((feature) => (
           <label key={feature.name} className="block">
             <span className="mb-1.5 flex items-baseline justify-between gap-2">
-              <span className="font-mono text-[11px] uppercase tracking-wider text-neutral-400">
+              <span className="font-mono text-[11px] uppercase tracking-wider text-content-secondary">
                 {feature.name.replace(/_/g, " ")}
               </span>
               {feature.usedBy.length < models.length && (
                 <span
-                  className="font-mono text-[10px] text-neutral-600"
+                  className="font-mono text-[10px] text-content-muted"
                   title={`Only used by: ${feature.usedBy.join(", ")}`}
                 >
                   {feature.usedBy.length}/{models.length}
@@ -148,7 +148,7 @@ export default function ModelComparisonPanel() {
                 onChange={(e) =>
                   setValues((prev) => ({ ...prev, [feature.name]: e.target.value }))
                 }
-                className="w-full rounded border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-amber-500 focus:outline-none"
+                className="w-full rounded border border-surface-border bg-surface-raised px-3 py-2 text-sm text-content focus:border-risk focus:outline-none"
               >
                 {feature.allowed_values.map((option) => (
                   <option key={option} value={option}>
@@ -164,7 +164,7 @@ export default function ModelComparisonPanel() {
                 onChange={(e) =>
                   setValues((prev) => ({ ...prev, [feature.name]: e.target.value }))
                 }
-                className="w-full rounded border border-neutral-800 bg-neutral-900 px-3 py-2 font-mono text-sm tabular-nums text-neutral-100 focus:border-amber-500 focus:outline-none"
+                className="w-full rounded border border-surface-border bg-surface-raised px-3 py-2 font-mono text-sm tabular-nums text-content focus:border-risk focus:outline-none"
               />
             )}
           </label>
@@ -174,13 +174,13 @@ export default function ModelComparisonPanel() {
       <button
         onClick={compare}
         disabled={status === "comparing"}
-        className="mt-6 rounded bg-amber-500 px-4 py-2.5 text-sm font-semibold text-neutral-950 transition hover:bg-amber-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 disabled:opacity-40"
+        className="mt-6 rounded bg-risk px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-risk-dim focus:outline-none focus-visible:ring-2 focus-visible:ring-risk disabled:opacity-40"
       >
         {status === "comparing" ? "Scoring…" : "Score all models"}
       </button>
 
       {Object.keys(results).length > 0 && (
-        <div className="mt-6 space-y-2.5 border-t border-neutral-800 pt-5">
+        <div className="mt-6 space-y-2.5 border-t border-surface-border pt-5">
           {models.map((m) => {
             const r = results[m.model];
             if (!r) return null;
@@ -191,7 +191,7 @@ export default function ModelComparisonPanel() {
                   key={m.model}
                   className="grid grid-cols-[7rem_1fr] items-center gap-3"
                 >
-                  <span className="font-mono text-xs text-neutral-400">{m.model}</span>
+                  <span className="font-mono text-xs text-content-secondary">{m.model}</span>
                   <span className="truncate font-mono text-xs text-red-400" title={r.error}>
                     {r.error}
                   </span>
@@ -202,21 +202,21 @@ export default function ModelComparisonPanel() {
             const width = maxProbability > 0 ? (r.probability / maxProbability) * 100 : 0;
             return (
               <div key={m.model} className="grid grid-cols-[7rem_1fr_4.5rem] items-center gap-3">
-                <span className="font-mono text-xs text-neutral-400">{m.model}</span>
-                <div className="h-6 overflow-hidden rounded-sm bg-neutral-900">
+                <span className="font-mono text-xs text-content-secondary">{m.model}</span>
+                <div className="h-6 overflow-hidden rounded-sm bg-surface-raised">
                   <div
-                    className="h-full rounded-sm bg-neutral-600 transition-[width] duration-500 ease-out"
+                    className="h-full rounded-sm bg-content-muted transition-[width] duration-500 ease-out"
                     style={{ width: `${width}%` }}
                   />
                 </div>
-                <span className="text-right font-mono text-xs tabular-nums text-neutral-200">
+                <span className="text-right font-mono text-xs tabular-nums text-content">
                   {r.probability.toFixed(4)}
                 </span>
               </div>
             );
           })}
 
-          <p className="pt-2 text-xs leading-relaxed text-neutral-500">
+          <p className="pt-2 text-xs leading-relaxed text-content-muted">
             Models trained on different targets aren't directly comparable — engagement and
             churn answer different questions. Read this as contract coverage, not a leaderboard.
           </p>

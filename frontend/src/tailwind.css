@@ -1,3 +1,118 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+  Two token sets, same names. Components never reference a hex value or a
+  Tailwind grey -- they use semantic names, and the theme decides what those
+  resolve to.
+
+  The Vite scaffold shipped `#root { max-width: 1280px; text-align: center }`
+  and `body { display: flex; place-items: center }`, which capped the app
+  width and centred every string of text. Both are gone.
+*/
+
+@layer base {
+  /* LIGHT (default) */
+  :root {
+    color-scheme: light;
+
+    --surface-base: #f7f7f5;
+    --surface-raised: #ffffff;
+    --surface-overlay: #eeeeea;
+    --surface-border: #dededa;
+
+    --text-primary: #18181b;
+    --text-secondary: #52525b;
+    --text-muted: #8a8a92;
+
+    /* Brand red stays saturated in both themes -- it is the identity. */
+    --risk: #d40812;
+    --risk-dim: #a30610;
+    --risk-wash: #fdeaeb;
+
+    --safe: #15803d;
+    --safe-dim: #166534;
+    --safe-wash: #e8f5ec;
+
+    --accent: #18181b;
+    --accent-dim: #3f3f46;
+  }
+
+  /* DARK */
+  .dark {
+    color-scheme: dark;
+
+    --surface-base: #0b0b0f;
+    --surface-raised: #131318;
+    --surface-overlay: #1b1b22;
+    --surface-border: #26262e;
+
+    --text-primary: #ededed;
+    --text-secondary: #a1a1aa;
+    --text-muted: #6b6b75;
+
+    --risk: #e50914;
+    --risk-dim: #8c1116;
+    --risk-wash: #2a0a0d;
+
+    --safe: #22c55e;
+    --safe-dim: #15803d;
+    --safe-wash: #08240f;
+
+    --accent: #f5f5f1;
+    --accent-dim: #a3a3a0;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background-color: var(--surface-base);
+    color: var(--text-primary);
+    font-family: Inter, system-ui, -apple-system, sans-serif;
+    line-height: 1.5;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  #root {
+    min-height: 100vh;
+  }
+
+  /* Tabular figures by default: this is an instrument, and digits that
+     shift width make columns of numbers unreadable. */
+  code,
+  pre,
+  .font-mono {
+    font-variant-numeric: tabular-nums;
+  }
+
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--risk);
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

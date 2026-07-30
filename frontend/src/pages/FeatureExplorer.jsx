@@ -9,11 +9,11 @@ import FeatureTable from "../components/FeatureTable";
 export default function FeatureExplorer() {
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <header className="border-b border-neutral-800 pb-6">
-        <h1 className="text-2xl font-semibold tracking-tight text-neutral-100">
+      <header className="border-b border-surface-border pb-6">
+        <h1 className="text-2xl font-semibold tracking-tight text-content">
           Features
         </h1>
-        <p className="mt-1 max-w-prose text-sm leading-relaxed text-neutral-400">
+        <p className="mt-1 max-w-prose text-sm leading-relaxed text-content-secondary">
           Every feature the platform computes, with measured coverage and staleness. Look up a
           value by entity key to see what the online store returns and how long it took.
         </p>

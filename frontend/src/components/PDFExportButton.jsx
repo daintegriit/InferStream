@@ -14,7 +14,7 @@ export default function PDFExportButton({ model, result }) {
       onClick={() => exportInferenceToPDF({ model, result })}
       disabled={!ready}
       title={ready ? "Export this prediction" : "Run a prediction first"}
-      className="flex items-center gap-2 rounded border border-neutral-800 bg-neutral-900 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-neutral-400 transition hover:text-neutral-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 disabled:cursor-not-allowed disabled:opacity-30"
+      className="flex items-center gap-2 rounded border border-surface-border bg-surface-raised px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-content-secondary transition hover:text-content focus:outline-none focus-visible:ring-2 focus-visible:ring-risk disabled:cursor-not-allowed disabled:opacity-30"
     >
       <FiFileText aria-hidden />
       Export PDF

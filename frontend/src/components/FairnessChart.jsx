@@ -5,14 +5,13 @@ const API = import.meta.env.VITE_API_URL || "http://localhost:8007";
 /**
  * Counterfactual sweep.
  *
- * Holds every feature fixed except one, re-scores across all of that
- * attribute's legal values, and shows the spread.
- *
  * Bars are scaled 0..1 against the probability range, NOT normalised to the
- * largest value in the set. Normalising to max turns a 0.0001 difference
- * between near-zero probabilities into a dramatic visual gap -- the chart
- * would show a huge effect where there is none. Absolute scaling means a
- * negligible spread looks negligible, which is the honest reading.
+ * largest value: normalising turns a 0.0001 gap between near-zero values
+ * into a dramatic visual difference.
+ *
+ * Both measures are reported. Absolute spread is right near 0.5; near the
+ * tails it hides real effects, because 0.0045 on a base of 0.015 is a 1.3x
+ * swing. Red appears only when one of them is material.
  */
 export default function FairnessChart({ result }) {
   const [attributes, setAttributes] = useState([]);
@@ -81,13 +80,11 @@ export default function FairnessChart({ result }) {
       .map(([value, probability]) => ({
         value,
         probability,
-        width: probability * 100, // absolute 0..1 scale
+        width: probability * 100,
         observed: value === sweep.observed_value,
       }));
   }, [sweep]);
 
-  // Absolute spread understates effects near the tails: 0.0045 on a base of
-  // 0.015 is a 1.3x swing. Report both and let the larger one speak.
   const ratio = useMemo(() => {
     if (!sweep) return null;
     const values = Object.values(sweep.probabilities);
@@ -99,24 +96,24 @@ export default function FairnessChart({ result }) {
   const materialRelative = ratio != null && ratio >= 1.25;
 
   return (
-    <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-6 text-neutral-100">
-      <header className="mb-5 flex flex-wrap items-baseline justify-between gap-3 border-b border-neutral-800 pb-4">
+    <section className="rounded-lg border border-surface-border bg-surface-base p-6 text-content">
+      <header className="mb-5 flex flex-wrap items-baseline justify-between gap-3 border-b border-surface-border pb-4">
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Counterfactual sweep</h2>
-          <p className="mt-1 font-mono text-[11px] uppercase tracking-widest text-neutral-500">
+          <p className="mt-1 font-mono text-[11px] uppercase tracking-widest text-content-muted">
             All features held fixed except one
           </p>
         </div>
 
         {attributes.length > 0 && (
           <label className="flex items-center gap-2">
-            <span className="font-mono text-[11px] uppercase tracking-wider text-neutral-500">
+            <span className="font-mono text-[11px] uppercase tracking-wider text-content-muted">
               vary
             </span>
             <select
               value={attribute}
               onChange={(e) => setAttribute(e.target.value)}
-              className="rounded border border-neutral-800 bg-neutral-900 px-2 py-1 font-mono text-xs text-amber-400 focus:border-amber-500 focus:outline-none"
+              className="rounded border border-surface-border bg-surface-raised px-2 py-1 font-mono text-xs text-content focus:border-accent focus:outline-none"
             >
               {attributes.map((name) => (
                 <option key={name} value={name}>
@@ -129,17 +126,17 @@ export default function FairnessChart({ result }) {
       </header>
 
       {!result?.features && (
-        <p className="text-sm text-neutral-500">Run a prediction to sweep it.</p>
+        <p className="text-sm text-content-muted">Run a prediction to sweep it.</p>
       )}
 
       {status === "loading" && (
-        <p className="font-mono text-xs uppercase tracking-widest text-neutral-500">
+        <p className="font-mono text-xs uppercase tracking-widest text-content-muted">
           Scoring {attribute} variants
         </p>
       )}
 
       {status === "error" && (
-        <p className="rounded border border-red-900/60 bg-red-950/30 px-3 py-2 font-mono text-xs text-red-300">
+        <p className="rounded border border-risk-dim bg-risk-wash px-3 py-2 font-mono text-xs text-risk">
           {error}
         </p>
       )}
@@ -151,41 +148,44 @@ export default function FairnessChart({ result }) {
               <div key={row.value} className="grid grid-cols-[9rem_1fr_4.5rem] items-center gap-3">
                 <span
                   className={`truncate font-mono text-xs ${
-                    row.observed ? "text-amber-400" : "text-neutral-400"
+                    row.observed ? "text-content" : "text-content-secondary"
                   }`}
                   title={row.value}
                 >
                   {row.value}
-                  {row.observed && <span className="ml-1 text-neutral-600">◂</span>}
+                  {row.observed && <span className="ml-1 text-content-muted">◂</span>}
                 </span>
 
-                <div className="relative h-6 overflow-hidden rounded-sm bg-neutral-900">
+                <div className="relative h-6 overflow-hidden rounded-sm bg-surface-raised">
                   <div
                     className={`h-full rounded-sm transition-[width] duration-500 ease-out ${
-                      row.observed ? "bg-amber-500" : "bg-neutral-700"
+                      row.probability >= 0.5
+                        ? "bg-risk"
+                        : row.observed
+                        ? "bg-content-muted"
+                        : "bg-surface-overlay"
                     }`}
                     style={{ width: `${Math.max(row.width, 0.4)}%` }}
                   />
-                  {/* Decision boundary, so bar position carries meaning. */}
-                  <div className="absolute inset-y-0 left-1/2 w-px bg-neutral-700/70" />
+                  <div className="absolute inset-y-0 left-1/2 w-px bg-surface-overlay" />
                 </div>
 
-                <span className="text-right font-mono text-xs tabular-nums text-neutral-300">
+                <span className="text-right font-mono text-xs tabular-nums text-content-secondary">
                   {row.probability.toFixed(4)}
                 </span>
               </div>
             ))}
           </div>
 
-          <footer className="mt-5 border-t border-neutral-800 pt-4">
+          <footer className="mt-5 border-t border-surface-border pt-4">
             <div className="flex flex-wrap items-baseline gap-8">
               <div className="flex items-baseline gap-3">
-                <span className="font-mono text-[11px] uppercase tracking-widest text-neutral-500">
+                <span className="font-mono text-[11px] uppercase tracking-widest text-content-muted">
                   absolute
                 </span>
                 <span
                   className={`font-mono text-2xl tabular-nums ${
-                    materialAbsolute ? "text-amber-400" : "text-neutral-300"
+                    materialAbsolute ? "text-risk" : "text-content-secondary"
                   }`}
                 >
                   {sweep.max_spread.toFixed(4)}
@@ -194,12 +194,12 @@ export default function FairnessChart({ result }) {
 
               {ratio != null && (
                 <div className="flex items-baseline gap-3">
-                  <span className="font-mono text-[11px] uppercase tracking-widest text-neutral-500">
+                  <span className="font-mono text-[11px] uppercase tracking-widest text-content-muted">
                     relative
                   </span>
                   <span
                     className={`font-mono text-2xl tabular-nums ${
-                      materialRelative ? "text-amber-400" : "text-neutral-300"
+                      materialRelative ? "text-risk" : "text-content-secondary"
                     }`}
                   >
                     {ratio.toFixed(2)}×
@@ -208,24 +208,24 @@ export default function FairnessChart({ result }) {
               )}
             </div>
 
-            <p className="mt-3 max-w-prose text-sm leading-relaxed text-neutral-400">
+            <p className="mt-3 max-w-prose text-sm leading-relaxed text-content-secondary">
               {materialAbsolute ? (
                 <>
-                  Changing <span className="text-neutral-200">{attribute}</span> alone moves the
+                  Changing <span className="text-content">{attribute}</span> alone moves the
                   prediction by {(sweep.max_spread * 100).toFixed(1)} points. Worth understanding
                   before this model informs a decision about anyone.
                 </>
               ) : materialRelative ? (
                 <>
                   The absolute gap is small, but the highest group is{" "}
-                  <span className="text-neutral-200">{ratio.toFixed(2)}×</span> the lowest. Near
+                  <span className="text-content">{ratio.toFixed(2)}×</span> the lowest. Near
                   the tails a small absolute difference is a large proportional one — worth
                   checking before treating{" "}
-                  <span className="text-neutral-200">{attribute}</span> as inert.
+                  <span className="text-content">{attribute}</span> as inert.
                 </>
               ) : (
                 <>
-                  <span className="text-neutral-200">{attribute}</span> moves the prediction
+                  <span className="text-content">{attribute}</span> moves the prediction
                   negligibly on both measures. The bars are near-identical because the effect is
                   near-zero, not because the chart is flat.
                 </>
