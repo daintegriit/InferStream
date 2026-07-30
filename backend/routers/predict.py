@@ -1,235 +1,240 @@
+"""
+backend/routers/predict.py
+
+The feature contract is read off the fitted pipeline at load time. Nothing
+about features is hardcoded here: add a column in the notebook, retrain,
+drop in the pkl, and the API contract, the validation rules and the
+dashboard form all follow automatically.
+
+Only self-contained sklearn Pipelines are accepted. A bare estimator plus
+loose scaler/encoder files is the arrangement that let training and serving
+drift apart, so it is rejected at startup.
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+from pathlib import Path
+from typing import Any, Dict, List, Tuple
+
+import joblib
+import pandas as pd
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Dict, Any
-import joblib
-import os
-import traceback
-import pandas as pd
+from sklearn.pipeline import Pipeline
 
 from state.prediction_store import log_prediction
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# ============================================================
-# Request Schema
-# ============================================================
+# Anchored to this file, not the working directory: uvicorn runs from backend/,
+# python main.py may not, and Docker does something else again.
+_BACKEND = Path(__file__).resolve().parent.parent
+MODEL_DIR = Path(os.getenv("MODEL_DIR", _BACKEND / "models" / "netflix"))
+
+MODEL_FILES = {
+    "xgboost": "xgb_pipeline.pkl",
+    "sklearn": "sklearn_pipeline.pkl",
+    "engagement": "engagement_pipeline_xgb.pkl",
+}
+
+
 class InferenceRequest(BaseModel):
     model: str
     features: Dict[str, Any]
 
-# ============================================================
-# Model Paths
-# ============================================================
-MODEL_DIR = "models/netflix"
 
-MODEL_FILES = {
-    "xgboost": "xgb_pipeline.pkl",
-    "sklearn": "sklearn_model.pkl",
-}
+def _introspect(pipeline: Pipeline) -> Tuple[List[str], List[str], Dict[str, List[str]]]:
+    """Read numeric columns, categorical columns and vocabularies off the fitted
+    ColumnTransformer."""
+    numeric: List[str] = []
+    categorical: List[str] = []
+    vocabularies: Dict[str, List[str]] = {}
 
-LOADED_MODELS: Dict[str, Any] = {}
+    steps = getattr(pipeline, "named_steps", {})
+    pre = steps.get("preprocessor") or steps.get("pre")
+    if pre is None or not hasattr(pre, "transformers_"):
+        return numeric, categorical, vocabularies
 
-# ============================================================
-# REQUIRED RAW FEATURES (frontend contract)
-# ============================================================
-REQUIRED_FEATURES = {
-    "age",
-    "watch_hours",
-    "last_login_days",
-    "monthly_fee",
-    "number_of_profiles",
-    "avg_watch_time_per_day",
-    "gender",
-    "subscription_type",
-    "region",
-    "device",
-}
+    for _name, transformer, columns in pre.transformers_:
+        if isinstance(transformer, str):  # "drop" / "passthrough"
+            continue
+        cats = getattr(transformer, "categories_", None)
+        if cats is not None:
+            for col, values in zip(columns, cats):
+                categorical.append(col)
+                vocabularies[col] = [str(v) for v in values]
+        else:
+            numeric.extend(columns)
 
-# ============================================================
-# CANONICAL ENCODED FEATURE NAMES (FROM TRAINING)
-# ============================================================
-FEATURE_NAMES = [
-    "num__age",
-    "num__watch_hours",
-    "num__last_login_days",
-    "num__monthly_fee",
-    "num__number_of_profiles",
-    "num__avg_watch_time_per_day",
+    return numeric, categorical, vocabularies
 
-    "cat__gender_Female",
-    "cat__gender_Male",
-    "cat__gender_Other",
 
-    "cat__subscription_type_Basic",
-    "cat__subscription_type_Premium",
-    "cat__subscription_type_Standard",
+class Predictor:
+    def __init__(self, name: str, pipeline: Any):
+        if not isinstance(pipeline, Pipeline):
+            raise ValueError(
+                f"'{name}' is a bare {type(pipeline).__name__}, not a Pipeline. "
+                f"Re-export it with the ColumnTransformer included so preprocessing "
+                f"travels with the model."
+            )
 
-    "cat__region_Africa",
-    "cat__region_Asia",
-    "cat__region_Europe",
-    "cat__region_North America",
-    "cat__region_Oceania",
-    "cat__region_South America",
+        self.name = name
+        self.pipeline = pipeline
 
-    "cat__device_Desktop",
-    "cat__device_Laptop",
-    "cat__device_Mobile",
-    "cat__device_TV",
-    "cat__device_Tablet",
-]
+        # Exact column set AND order the pipeline was fitted on.
+        self.input_features: List[str] = list(getattr(pipeline, "feature_names_in_", []))
+        if not self.input_features:
+            raise ValueError(
+                f"'{name}' has no feature_names_in_. Fit it on a DataFrame so the "
+                f"column contract travels with the artifact."
+            )
 
-# ============================================================
-# Startup: Load Models
-# ============================================================
-def load_models():
+        self.numeric, self.categorical, self.vocabularies = _introspect(pipeline)
+
+    # ---------- validation ----------
+
+    def validate(self, raw: Dict[str, Any]) -> None:
+        missing = [f for f in self.input_features if f not in raw]
+        if missing:
+            raise HTTPException(400, f"Missing required features: {missing}")
+
+        extra = [k for k in raw if k not in self.input_features]
+        if extra:
+            logger.info("[%s] ignoring features not in contract: %s", self.name, extra)
+
+        for col, allowed in self.vocabularies.items():
+            value = str(raw.get(col))
+            if value not in allowed:
+                # The encoder uses handle_unknown='ignore', which would zero the
+                # whole column and predict on a silently degraded vector. Reject.
+                raise HTTPException(
+                    400, f"Unknown value for '{col}': {value!r}. Expected one of {allowed}"
+                )
+
+        for col in self.numeric:
+            try:
+                float(raw[col])
+            except (TypeError, ValueError):
+                raise HTTPException(400, f"Feature '{col}' must be numeric, got {raw[col]!r}")
+
+    # ---------- inference ----------
+
+    def _frame(self, raw: Dict[str, Any]) -> pd.DataFrame:
+        # Coerce to the types the pipeline was fitted on. A JSON body sending
+        # "51" for age would otherwise hand StandardScaler an object column.
+        row = {
+            col: (float(raw[col]) if col in self.numeric else str(raw[col]))
+            for col in self.input_features  # order from the artifact
+        }
+        return pd.DataFrame([row])
+
+    def probability(self, raw: Dict[str, Any]) -> float:
+        frame = self._frame(raw)
+        if hasattr(self.pipeline, "predict_proba"):
+            return float(self.pipeline.predict_proba(frame)[0][1])
+        return float(self.pipeline.predict(frame)[0])
+
+    def schema(self) -> Dict[str, Any]:
+        return {
+            "model": self.name,
+            "features": [
+                {
+                    "name": col,
+                    "type": "categorical" if col in self.vocabularies else "numeric",
+                    "allowed_values": self.vocabularies.get(col),
+                }
+                for col in self.input_features
+            ],
+        }
+
+
+LOADED: Dict[str, Predictor] = {}
+
+
+def load_models() -> None:
+    """Called from the FastAPI lifespan handler, never at import time."""
+    logger.info("Loading models from %s", MODEL_DIR)
+
     for name, filename in MODEL_FILES.items():
-        path = os.path.join(MODEL_DIR, filename)
-        if not os.path.exists(path):
-            print(f"❌ Missing model file: {path}")
+        path = MODEL_DIR / filename
+        if not path.is_file():
+            logger.error("Missing model file: %s", path)
             continue
         try:
-            LOADED_MODELS[name] = joblib.load(path)
-            print(f"✅ Loaded {name} from {filename}")
-        except Exception as e:
-            print(f"❌ Failed loading {name}: {e}")
+            predictor = Predictor(name, joblib.load(path))
+        except Exception as exc:
+            logger.error("Could not load '%s' from %s: %s", name, filename, exc)
+            continue
 
-load_models()
-
-# ============================================================
-# Helpers
-# ============================================================
-def _validate_required_features(features: Dict[str, Any]) -> None:
-    missing = REQUIRED_FEATURES - set(features.keys())
-    if missing:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Missing required features: {sorted(missing)}"
+        LOADED[name] = predictor
+        logger.info(
+            "Loaded '%s': %d features (%d numeric, %d categorical)",
+            name,
+            len(predictor.input_features),
+            len(predictor.numeric),
+            len(predictor.categorical),
         )
 
-def _normalize_gender(val: Any) -> str:
-    if val is None:
-        return "Other"
-    s = str(val).strip().lower()
-    if s in ("male", "m"):
-        return "Male"
-    if s in ("female", "f"):
-        return "Female"
-    return "Other"
+    if not LOADED:
+        raise RuntimeError(f"No models loaded from {MODEL_DIR}. Refusing to start.")
 
-def _encode_features(raw: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Encode raw features into EXACT training schema
-    """
-    encoded = {f: 0 for f in FEATURE_NAMES}
 
-    # numeric
-    encoded["num__age"] = raw["age"]
-    encoded["num__watch_hours"] = raw["watch_hours"]
-    encoded["num__last_login_days"] = raw["last_login_days"]
-    encoded["num__monthly_fee"] = raw["monthly_fee"]
-    encoded["num__number_of_profiles"] = raw["number_of_profiles"]
-    encoded["num__avg_watch_time_per_day"] = raw["avg_watch_time_per_day"]
+def _get(name: str) -> Predictor:
+    if name not in LOADED:
+        raise HTTPException(404, f"Model '{name}' not available. Loaded: {sorted(LOADED)}")
+    return LOADED[name]
 
-    # categorical
-    encoded[f"cat__gender_{raw['gender']}"] = 1
-    encoded[f"cat__subscription_type_{raw['subscription_type']}"] = 1
-    encoded[f"cat__region_{raw['region']}"] = 1
-    encoded[f"cat__device_{raw['device']}"] = 1
-
-    return encoded
-
-def _predict(model_obj, encoded_features: Dict[str, Any]) -> int:
-    df = pd.DataFrame([encoded_features])
-    pred = model_obj.predict(df)[0]
-    return int(pred)
 
 # ============================================================
-# Prediction Endpoint
+# Routes
 # ============================================================
+@router.get("/schema")
+async def list_schemas():
+    """Lets the dashboard render its form from the artifact instead of hardcoding fields."""
+    return {"models": [p.schema() for p in LOADED.values()]}
+
+
 @router.post("")
 @router.post("/")
 async def predict(req: InferenceRequest):
-    if req.model not in LOADED_MODELS:
-        raise HTTPException(404, f"Model '{req.model}' not available")
+    predictor = _get(req.model)
+    raw = dict(req.features)
+    predictor.validate(raw)
 
-    _validate_required_features(req.features)
+    probability = predictor.probability(raw)
+    label = int(probability >= 0.5)
 
-    try:
-        model_obj = LOADED_MODELS[req.model]
+    log_prediction(model=req.model, features=raw, prediction=label)
 
-        raw = dict(req.features)
-        raw["gender"] = _normalize_gender(raw["gender"])
+    return {"model": req.model, "prediction": label, "probability": round(probability, 6)}
 
-        encoded = _encode_features(raw)
-        prediction = _predict(model_obj, encoded)
 
-        log_prediction(
-            model=req.model,
-            features=raw,
-            prediction=prediction
-        )
-
-        return {
-            "model": req.model,
-            "prediction": prediction
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Inference failed: {e}"
-        )
-
-# ============================================================
-# Fairness Endpoint (Gender Flip)
-# ============================================================
 @router.post("/fairness")
-async def predict_fairness(req: InferenceRequest):
-    if req.model not in LOADED_MODELS:
-        raise HTTPException(404, f"Model '{req.model}' not available")
+async def predict_fairness(req: InferenceRequest, attribute: str = "gender"):
+    """Counterfactual sweep: hold everything fixed, vary one categorical attribute."""
+    predictor = _get(req.model)
+    raw = dict(req.features)
+    predictor.validate(raw)
 
-    _validate_required_features(req.features)
-
-    try:
-        model_obj = LOADED_MODELS[req.model]
-
-        raw = dict(req.features)
-        base_gender = _normalize_gender(raw["gender"])
-        raw["gender"] = base_gender
-
-        encoded_base = _encode_features(raw)
-
-        # flip gender
-        encoded_alt = encoded_base.copy()
-        encoded_alt["cat__gender_Male"], encoded_alt["cat__gender_Female"] = (
-            encoded_base["cat__gender_Female"],
-            encoded_base["cat__gender_Male"],
-        )
-
-        pred_base = _predict(model_obj, encoded_base)
-        pred_alt = _predict(model_obj, encoded_alt)
-
-        return {
-            "model": req.model,
-            "fairness_check": {
-                "attribute": "gender",
-                "base_gender": base_gender,
-                "alt_gender": "Female" if base_gender == "Male" else "Male",
-                "base_prediction": pred_base,
-                "alt_prediction": pred_alt,
-                "is_fair": pred_base == pred_alt,
-                "delta": pred_alt - pred_base
-            }
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        traceback.print_exc()
+    if attribute not in predictor.vocabularies:
         raise HTTPException(
-            status_code=500,
-            detail=f"Fairness check failed: {e}"
+            400, f"'{attribute}' is not categorical. Options: {sorted(predictor.vocabularies)}"
         )
+
+    results = {
+        value: round(predictor.probability({**raw, attribute: value}), 6)
+        for value in predictor.vocabularies[attribute]
+    }
+
+    return {
+        "model": req.model,
+        "fairness_check": {
+            "attribute": attribute,
+            "observed_value": str(raw[attribute]),
+            "probabilities": results,
+            "max_spread": round(max(results.values()) - min(results.values()), 6),
+        },
+    }
