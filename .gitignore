@@ -56,3 +56,13 @@ data/
 # OS
 # ==========================
 desktop.ini
+# Secrets
+.env
+*.env
+!.env.example
+
+# Editor history
+.history/
+
+# Model artifacts missed by earlier rules
+*.keras
